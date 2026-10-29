@@ -7,7 +7,8 @@ import {
   Badge, Button, Card, Field, Loading, Modal, MoneyInput, Notice, PageHeader, RateField, Tabs, fmtDateTime, inputCls, moneyHint, useAsync, inputSm,
 } from "../../components/ui";
 import { pct, won } from "../../lib/format";
-import { canSeeHistory, canWrite } from "../../lib/perm";
+import { canSeeHistory, canWrite, isAdmin } from "../../lib/perm";
+import { DeleteDialog } from "../../components/DeleteDialog";
 import { useRefData } from "../../lib/refdata";
 import { go, href } from "../../lib/router";
 
@@ -233,6 +234,7 @@ function EventList({ me }: { me: Me | null }) {
   const [status, setStatus] = useState("");
   const { data, error, loading, reload } = useAsync<EventListItem[]>(() => api.allEvents({ event_type: type || undefined, status: status || undefined }), [type, status]);
   const [cancel, setCancel] = useState<EventListItem | null>(null);
+  const [del, setDel] = useState<EventListItem | null>(null);
   const [files, setFiles] = useState<EventListItem | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   return (
@@ -264,18 +266,28 @@ function EventList({ me }: { me: Me | null }) {
                   <td className="px-3 py-2 text-xs max-w-[240px] break-words">{e.reason ?? ""}</td>
                   <td className="px-3 py-2"><div className="flex gap-1.5 justify-end">
                     <Button size="sm" onClick={() => setFiles(e)} aria-label={`${e.dormitory_name} ${EVENT_LABEL[e.event_type]} 증빙`}>증빙</Button>
-                    {canWrite(me) && e.cancellable && <Button size="sm" variant="danger" onClick={() => setCancel(e)}>취소</Button>}</div></td>
+                    {canWrite(me) && e.cancellable && <Button size="sm" variant="danger" onClick={() => setCancel(e)}>취소</Button>}
+                    {isAdmin(me) && (e.cancellable || e.status === "CANCELLED") && <Button size="sm" variant="danger" onClick={() => setDel(e)}
+                      aria-label={`${e.dormitory_name} ${EVENT_LABEL[e.event_type]} 삭제`}>삭제</Button>}</div></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ))}
-      <p className="mt-3 text-xs text-ink-3">취소는 차입금마다 가장 최근에 적용한 이벤트부터 할 수 있습니다. 취소하면 직전 상태를 복원한 새 버전이 만들어지고, 원래 이벤트는 '취소'로 남습니다.</p>
+      <p className="mt-3 text-xs text-ink-3">취소는 차입금마다 가장 최근에 적용한 이벤트부터 할 수 있습니다. 취소하면 직전 상태를 복원한 새 버전이 만들어지고, 원래 이벤트는 '취소'로 남습니다.
+        {isAdmin(me) && " 관리자 '삭제'는 같은 순서(가장 최근부터)로, 이벤트와 그 버전을 이력에서 숨기고 직전 버전으로 되돌립니다."}</p>
       {files && <Modal wide title={`증빙자료 — ${files.dormitory_name} · ${EVENT_LABEL[files.event_type]}(${files.event_date})`} onClose={() => setFiles(null)}
         footer={<Button onClick={() => setFiles(null)}>닫기</Button>}>
         <AttachmentPanel compact loanId={files.loan_id} owner={{ type: "LOAN_EVENT", id: files.id }} writable={canWrite(me)} canDownload={me?.can_download ?? false} />
       </Modal>}
+      {del && <DeleteDialog title="이벤트 삭제" target={`${del.dormitory_name} · ${del.loan_code} — ${EVENT_LABEL[del.event_type] ?? del.event_type}(${del.event_date})`}
+        effects={del.status === "APPLIED" ? [
+          `이 이벤트와 그 결과 원리금 테이블(V${del.resulting_version_no ?? "?"})이 숨겨지고, 직전 버전이 다시 현재 원리금 테이블이 됩니다.`,
+          "금리변동·전액대환이었다면 바꿨던 금리이력·재원도 되돌립니다.", "'취소'와 달리 이력 목록에서도 빠집니다(삭제·복구 화면에서 되살림).",
+        ] : ["이미 취소된 이벤트입니다. 이력 목록에서 빠지고, 이 이벤트가 만든 원리금 테이블 버전도 숨겨집니다."]}
+        onClose={() => setDel(null)}
+        onConfirm={async (reason) => { await api.deleteEvent(del.id, reason); setDel(null); invalidateLoans(); setMsg("이벤트를 삭제했습니다. 관리자 › 삭제·복구에서 되살릴 수 있습니다."); reload(); }} />}
       {cancel && <CancelDialog ev={cancel} onClose={() => setCancel(null)} onDone={(v) => { setCancel(null); invalidateLoans(); setMsg(`취소했습니다. 직전 상태를 복원한 V${v}을(를) 만들었습니다.`); reload(); }} />}
     </Card>
   );

@@ -92,7 +92,7 @@ def list_events(loan_id: uuid.UUID, db: Session = Depends(get_db), current_user:
     """이 차입금에 발생한 모든 이벤트(취소 포함) 타임라인 — 26번 '적용 이벤트' 추적."""
     get_accessible_loan(db, loan_id, current_user)
     events = db.execute(
-        select(LoanEvent).where(LoanEvent.loan_id == loan_id).order_by(LoanEvent.created_at, LoanEvent.id)
+        select(LoanEvent).where(LoanEvent.loan_id == loan_id, LoanEvent.is_deleted.is_(False)).order_by(LoanEvent.created_at, LoanEvent.id)
     ).scalars().all()
     version_nos = {
         v.id: v.version_no
@@ -186,7 +186,7 @@ def list_all_events(event_type: LoanEventType | None = None, status: str | None 
         loans = {k: v for k, v in loans.items() if k == loan_id}
     if not loans:
         return []
-    q = select(LoanEvent).where(LoanEvent.loan_id.in_(list(loans)))
+    q = select(LoanEvent).where(LoanEvent.loan_id.in_(list(loans)), LoanEvent.is_deleted.is_(False))
     if event_type:
         q = q.where(LoanEvent.event_type == event_type)
     if status:
@@ -197,7 +197,7 @@ def list_all_events(event_type: LoanEventType | None = None, status: str | None 
         q = q.where(LoanEvent.event_date <= date_to)
     events = db.execute(q.order_by(LoanEvent.created_at.desc()).limit(min(max(limit, 1), 1000))).scalars().all()
     latest = {}
-    for ev in db.execute(select(LoanEvent).where(LoanEvent.loan_id.in_({e.loan_id for e in events}),
+    for ev in db.execute(select(LoanEvent).where(LoanEvent.loan_id.in_({e.loan_id for e in events}), LoanEvent.is_deleted.is_(False),
                                                  LoanEvent.status == "APPLIED").order_by(LoanEvent.created_at)).scalars():
         latest[ev.loan_id] = ev.id
     vnos = {v.id: v.version_no for v in db.execute(select(RepaymentScheduleVersion).where(

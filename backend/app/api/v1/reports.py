@@ -148,7 +148,7 @@ def build_report(db: Session, user: User, kind: str, *, dormitory_id=None, fund_
             ids = {loan.id: (loan, dorm) for loan, dorm, _ in loans}
             names = {u.id: u.name for u in db.execute(select(User)).scalars()}
             rows = []
-            for e in db.execute(select(LoanEvent).where(LoanEvent.loan_id.in_(ids)).order_by(LoanEvent.event_date)).scalars() if ids else []:
+            for e in db.execute(select(LoanEvent).where(LoanEvent.loan_id.in_(ids), LoanEvent.is_deleted.is_(False)).order_by(LoanEvent.event_date)).scalars() if ids else []:
                 loan, dorm = ids[e.loan_id]
                 rows.append([dorm.dormitory_name, loan.loan_code, EVENT_LABEL.get(e.event_type.value, e.event_type.value), e.event_date,
                              "적용" if e.status.value == "APPLIED" else "취소", e.reason, names.get(e.created_by), e.created_at.replace(tzinfo=None)])

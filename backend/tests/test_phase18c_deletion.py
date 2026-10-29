@@ -138,3 +138,79 @@ def test_delete_notice_and_dormitory_cascade_restore():
     assert drec2["detail"]["loans"] == []                                    # 이미 지워진 차입금은 함께 묶지 않음
     r = client.post(f"/api/v1/admin/deletions/{lrec['id']}/restore", headers=h)
     assert r.status_code == 409 and "기숙사를 먼저" in r.json()["detail"]
+
+
+def _versions(h, loan_id):
+    return {v["version_no"]: v for v in client.get(f"/api/v1/loans/{loan_id}/schedule/versions", headers=h).json()}
+
+
+def _rates(h, loan_id):
+    return [r for r in client.get(f"/api/v1/loans/{loan_id}", headers=h).json()["rate_history"] if not r["is_deleted"]]
+
+
+def test_delete_events_and_versions_latest_first_with_restore():
+    h = admin_headers()
+    loan_id, _, _ = make_loan(h)
+    assert client.post(f"/api/v1/loans/{loan_id}/events/rate-change",
+                       json={"effective_start_date": "2024-08-31", "annual_rate": "3.5"}, headers=h).status_code == 201      # V2
+    assert client.post(f"/api/v1/loans/{loan_id}/events/early-repayment",
+                       json={"event_date": "2024-11-30", "repay_type": "PARTIAL", "repay_amount": 10_000_000}, headers=h).status_code == 201  # V3
+    evs = {e["event_type"]: e for e in client.get(f"/api/v1/loans/{loan_id}/events", headers=h).json()}
+    vs = _versions(h, loan_id)
+    assert sorted(vs) == [1, 2, 3] and vs[3]["is_current"] and len(_rates(h, loan_id)) == 2
+
+    # 중간 이벤트·지난 버전은 따로 못 지움, 자금담당은 권한 없음
+    r = client.post(f"/api/v1/admin/delete/events/{evs['RATE_CHANGE']['id']}", json={"reason": "x"}, headers=h)
+    assert r.status_code == 409 and "가장 최근" in r.json()["detail"]
+    r = client.post(f"/api/v1/admin/delete/schedule-versions/{vs[2]['id']}", json={"reason": "x"}, headers=h)
+    assert r.status_code == 409 and "현재(가장 최근) 버전부터" in r.json()["detail"]
+    assert client.post(f"/api/v1/admin/delete/events/{evs['EARLY_REPAYMENT']['id']}", json={"reason": "x"},
+                       headers=_fund_headers(h)).status_code == 403
+
+    # 현재 버전(V3) 삭제 = 조기상환 이벤트 삭제 → V2가 현재
+    rec_v3 = client.post(f"/api/v1/admin/delete/schedule-versions/{vs[3]['id']}", json={"reason": "잘못 입력"}, headers=h).json()
+    assert rec_v3["target_type"] == "EVENT" and "조기상환" in rec_v3["label"]
+    vs = _versions(h, loan_id)
+    assert sorted(vs) == [1, 2] and vs[2]["is_current"]
+    assert [e["event_type"] for e in client.get(f"/api/v1/loans/{loan_id}/events", headers=h).json()] == ["RATE_CHANGE"]
+    assert client.get(f"/api/v1/loans/{loan_id}/schedule/verification", headers=h).json()["overall"] == "NORMAL"
+
+    # 금리변동 이벤트 삭제 → V1 현재, 금리이력도 되돌림
+    rec_rc = client.post(f"/api/v1/admin/delete/events/{evs['RATE_CHANGE']['id']}", json={"reason": "잘못 입력"}, headers=h).json()
+    vs = _versions(h, loan_id)
+    assert sorted(vs) == [1] and vs[1]["is_current"]
+    rates = _rates(h, loan_id)
+    assert len(rates) == 1 and rates[0]["effective_end_date"] is None
+    assert client.get("/api/v1/events", params={"loan_id": loan_id}, headers=h).json() == []
+    assert client.get(f"/api/v1/loans/{loan_id}/schedule/verification", headers=h).json()["overall"] == "NORMAL"
+
+    # 복구는 역순만: 조기상환(V3)을 먼저 되살리려 하면 막힘
+    r = client.post(f"/api/v1/admin/deletions/{rec_v3['id']}/restore", headers=h)
+    assert r.status_code == 409 and "복구할 수 없습니다" in r.json()["detail"]
+    assert client.post(f"/api/v1/admin/deletions/{rec_rc['id']}/restore", headers=h).status_code == 200
+    assert len(_rates(h, loan_id)) == 2 and _versions(h, loan_id)[2]["is_current"]
+    assert client.post(f"/api/v1/admin/deletions/{rec_v3['id']}/restore", headers=h).status_code == 200
+    vs = _versions(h, loan_id)
+    assert sorted(vs) == [1, 2, 3] and vs[3]["is_current"]
+    assert {e["status"] for e in client.get(f"/api/v1/loans/{loan_id}/events", headers=h).json()} == {"APPLIED"}
+    assert client.get(f"/api/v1/loans/{loan_id}/schedule/verification", headers=h).json()["overall"] == "NORMAL"
+
+
+def test_delete_cancelled_event_hides_its_versions():
+    h = admin_headers()
+    loan_id, _, _ = make_loan(h)
+    assert client.post(f"/api/v1/loans/{loan_id}/events/rate-change",
+                       json={"effective_start_date": "2024-08-31", "annual_rate": "3.5"}, headers=h).status_code == 201      # V2
+    ev = client.get(f"/api/v1/loans/{loan_id}/events", headers=h).json()[0]
+    assert client.post(f"/api/v1/loans/{loan_id}/events/{ev['id']}/cancel", json={"reason": "철회"}, headers=h).status_code == 200  # V3(취소)
+    assert sorted(_versions(h, loan_id)) == [1, 2, 3]
+
+    rec = client.post(f"/api/v1/admin/delete/events/{ev['id']}", json={"reason": "기록 정리"}, headers=h).json()
+    vs = _versions(h, loan_id)
+    assert sorted(vs) == [1] and vs[1]["is_current"]
+    assert client.get(f"/api/v1/loans/{loan_id}/events", headers=h).json() == []
+    assert len(_rates(h, loan_id)) == 1
+    assert client.post(f"/api/v1/admin/deletions/{rec['id']}/restore", headers=h).status_code == 200
+    vs = _versions(h, loan_id)
+    assert sorted(vs) == [1, 2, 3] and vs[3]["is_current"]
+    assert client.get(f"/api/v1/loans/{loan_id}/events", headers=h).json()[0]["status"] == "CANCELLED"

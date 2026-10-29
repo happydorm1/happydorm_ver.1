@@ -72,6 +72,16 @@ def delete_schedule(loan_id: uuid.UUID, body: ReasonIn, db: Session = Depends(ge
     return _run(db, svc.delete_schedule, loan_id, body.reason, user)
 
 
+@router.post("/delete/events/{event_id}", response_model=DeletionRead)
+def delete_event(event_id: uuid.UUID, body: ReasonIn, db: Session = Depends(get_db), user: User = Depends(ADMIN)):
+    return _run(db, svc.delete_event, event_id, body.reason, user)
+
+
+@router.post("/delete/schedule-versions/{version_id}", response_model=DeletionRead)
+def delete_version(version_id: uuid.UUID, body: ReasonIn, db: Session = Depends(get_db), user: User = Depends(ADMIN)):
+    return _run(db, svc.delete_version, version_id, body.reason, user)
+
+
 @router.post("/delete/notices/{notice_id}", response_model=DeletionRead)
 def delete_notice(notice_id: uuid.UUID, body: ReasonIn, db: Session = Depends(get_db), user: User = Depends(ADMIN)):
     return _run(db, svc.delete_notice, notice_id, body.reason, user)

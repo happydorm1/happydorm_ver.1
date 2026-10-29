@@ -115,9 +115,31 @@ with sync_playwright() as p:
     expect(page.get_by_text("공문을 삭제했습니다")).to_be_visible()
     expect(issued.get_by_text("발급한 공문이 없습니다")).to_be_visible()
 
-    # 5) 복구: 기숙사·차입금·공문 → 원래대로
+    # 4b) 원리금 테이블 버전 건별 삭제(라온하우스 V2 = 이벤트 결과) → V1이 다시 현재, 이벤트도 함께 숨김
+    open_loan(page, "라온하우스")
+    page.get_by_role("tab", name="원리금 테이블").click()
+    expect(page.get_by_label("원리금 테이블 버전")).to_contain_text("V2")
+    page.get_by_role("button", name="이 버전(V2) 삭제").click()
+    confirm_delete(page, "원리금 테이블 버전 삭제", "E2E 버전 삭제")
+    expect(page.get_by_label("원리금 테이블 버전")).to_contain_text("V1 최초생성 (현재)")
+    expect(page.get_by_label("원리금 테이블 버전").locator("option")).to_have_count(1)
+    page.get_by_role("tab", name="이벤트·변경이력").click()
+    expect(page.get_by_text("적용된 이벤트가 없습니다")).to_be_visible()
+
+    # 4c) 이벤트 건별 삭제(이벤트 관리 › 이벤트 이력, 새봄관)
+    nav(page, "이벤트 관리")
+    page.get_by_role("tab", name="이벤트 이력").click()
+    row = page.locator("table tbody tr", has_text="새봄관").first
+    row.get_by_role("button", name=re.compile("삭제$")).click()
+    confirm_delete(page, "이벤트 삭제", "E2E 이벤트 삭제")
+    expect(page.get_by_text("이벤트를 삭제했습니다")).to_be_visible()
+    expect(page.locator("table tbody")).not_to_contain_text("새봄관")
+    expect(page.locator("table tbody")).not_to_contain_text("라온하우스")
+    shot(page, "d03_events")
+
+    # 5) 복구: 기숙사·차입금·공문·버전(이벤트)·이벤트 → 원래대로
     nav(page, "삭제·복구")
-    for label in ("바름학사", "미르기숙사", "가람관"):
+    for label in ("바름학사", "미르기숙사", "가람관", "2015-05-29_공자-30", "2018-11-30_공자-60"):
         hist.locator("li", has_text=label).get_by_role("button", name="복구").click()
         expect(page.get_by_text("복구했습니다")).to_be_visible()
     # 남은 것은 원리금 테이블 V1 — V2를 새로 만들었으므로 복구하면 이유를 안내하고 막는다
@@ -130,6 +152,12 @@ with sync_playwright() as p:
     expect(kpi_dorms(page)).to_contain_text("8곳")
     nav(page, "차입금 관리")
     expect(page.locator("table tbody")).to_contain_text("미르기숙사")
+    open_loan(page, "라온하우스")
+    page.get_by_role("tab", name="원리금 테이블").click()
+    expect(page.get_by_label("원리금 테이블 버전")).to_contain_text("V2")
+    nav(page, "이벤트 관리")
+    page.get_by_role("tab", name="이벤트 이력").click()
+    expect(page.locator("table tbody")).to_contain_text("새봄관")
 
     # 6) 휴대폰 폭: 삭제·복구 화면 가로 넘침 없음
     page.set_viewport_size({"width": 390, "height": 800})
@@ -138,4 +166,4 @@ with sync_playwright() as p:
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "가로 넘침"
     b.close()
 
-print("E2E OK: 관리자만 삭제 버튼·메뉴, 원리금 테이블 삭제·재생성(V2)·옛 테이블 복구 차단 안내, 차입금 삭제·복구, 차입금·기숙사 삭제가 대시보드에 반영(KPI 8→7→6)·복구 후 8, 안내공문 삭제·복구, 사유 필수, 휴대폰 폭")
+print("E2E OK: 관리자만 삭제 버튼·메뉴, 원리금 테이블 삭제·재생성(V2)·옛 테이블 복구 차단 안내, 차입금 삭제·복구, 차입금·기숙사 삭제가 대시보드에 반영(KPI 8→7→6)·복구 후 8, 안내공문 삭제·복구, 원리금 테이블 버전 건별 삭제(V2→V1)·이벤트 건별 삭제·복구, 사유 필수, 휴대폰 폭")

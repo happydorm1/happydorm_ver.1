@@ -62,7 +62,8 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
       {tab === "evidence" && <AttachmentPanel loanId={loan.id} writable={writable} canDownload={me?.can_download ?? false}
         title="증빙자료 — 이 차입금 전체"
         hint="약정서·상환유예 승인 공문·조기상환 근거 등. 여기서 올리면 '차입금' 첨부가 되고, 이벤트·기안·납부에 올린 자료도 함께 보입니다." />}
-      {tab === "history" && <HistoryTab loanId={loan.id} />}
+      {tab === "history" && <HistoryTab loanId={loan.id} loanCode={loan.loan_code} admin={isAdmin(me)}
+        onDeleted={() => { setFlash("이벤트를 삭제했습니다. 관리자 › 삭제·복구에서 되살릴 수 있습니다."); reload(); setSchedKey((k) => k + 1); }} />}
     </div>
   );
 }
@@ -243,8 +244,10 @@ const TABLE_LABEL: Record<string, string> = {
   repayment_schedule_version: "원리금 테이블", event_request: "기안·결재",
 };
 
-function HistoryTab({ loanId }: { loanId: string }) {
+function HistoryTab({ loanId, loanCode, admin, onDeleted }: { loanId: string; loanCode: string; admin: boolean; onDeleted: () => void }) {
   const ev = useAsync<LoanEventItem[]>(() => api.events(loanId), [loanId]);
+  const [del, setDel] = useState<LoanEventItem | null>(null);
+  const latestApplied = [...(ev.data ?? [])].reverse().find((e) => e.status === "APPLIED")?.id;
   const au = useAsync<AuditItem[]>(() => api.auditLogs(loanId), [loanId]);
   return (
     <div className="space-y-4">
@@ -259,6 +262,8 @@ function HistoryTab({ loanId }: { loanId: string }) {
                   <b>{EVENT_LABEL[e.event_type] ?? e.event_type}</b><span className="tabular">{e.event_date}</span>
                   {e.status === "APPLIED" ? <Badge tone="good">적용</Badge> : <Badge>취소</Badge>}
                   {e.resulting_version_no && <Badge tone="brand">→ V{e.resulting_version_no}</Badge>}
+                  {admin && (e.id === latestApplied || e.status === "CANCELLED") &&
+                    <Button size="sm" variant="danger" onClick={() => setDel(e)}>삭제</Button>}
                 </div>
                 <div className="text-xs text-ink-2">{e.created_by_name ?? "-"} · {fmtDateTime(e.created_at)}{e.reason ? ` · ${e.reason}` : ""}</div>
               </li>
@@ -266,6 +271,12 @@ function HistoryTab({ loanId }: { loanId: string }) {
           </ol>
         ))}
       </Card>
+      {del && <DeleteDialog title="이벤트 삭제" target={`${loanCode} — ${EVENT_LABEL[del.event_type] ?? del.event_type}(${del.event_date})`}
+        effects={del.status === "APPLIED"
+          ? [`이 이벤트와 그 결과 원리금 테이블(V${del.resulting_version_no ?? "?"})이 숨겨지고 직전 버전이 다시 현재가 됩니다.`, "금리변동·전액대환이었다면 금리이력·재원도 되돌립니다."]
+          : ["이미 취소된 이벤트입니다. 이력에서 빠지고 이 이벤트가 만든 원리금 테이블 버전도 숨겨집니다."]}
+        onClose={() => setDel(null)}
+        onConfirm={async (reason) => { await api.deleteEvent(del.id, reason); setDel(null); ev.reload(); onDeleted(); }} />}
       <Card title="변경이력(누가·언제·무엇을)">
         {au.error && <Notice tone="error">{au.error}</Notice>}
         {au.data && (

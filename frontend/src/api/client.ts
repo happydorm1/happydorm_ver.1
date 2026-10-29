@@ -130,6 +130,8 @@ export const api = {
   deleteDormitory: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/dormitories/${id}`, undefined, { reason }),
   deleteLoan: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/loans/${id}`, undefined, { reason }),
   deleteSchedule: (loanId: string, reason: string) => request<DeletionRecord>(`/admin/delete/loans/${loanId}/schedule`, undefined, { reason }),
+  deleteEvent: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/events/${id}`, undefined, { reason }),
+  deleteVersion: (versionId: string, reason: string) => request<DeletionRecord>(`/admin/delete/schedule-versions/${versionId}`, undefined, { reason }),
   deleteNotice: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/notices/${id}`, undefined, { reason }),
   contacts: (dormId: string, includeInactive = false) =>
     request<Contact[]>(`/dormitories/${dormId}/contacts`, includeInactive ? { include_inactive: "true" } : undefined),

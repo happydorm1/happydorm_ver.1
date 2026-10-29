@@ -6,7 +6,7 @@ import { Badge, Button, Card, Loading, Notice, PageHeader, fmtDateTime, useAsync
 import { isAdmin } from "../../lib/perm";
 import { refreshRefData } from "../../lib/refdata";
 
-const TYPE: Record<string, string> = { DORMITORY: "기숙사", LOAN: "차입금", SCHEDULE: "원리금 테이블", NOTICE: "안내공문" };
+const TYPE: Record<string, string> = { DORMITORY: "기숙사", LOAN: "차입금", SCHEDULE: "원리금 테이블", NOTICE: "안내공문", EVENT: "이벤트" };
 
 /** Phase 18c: 관리자 삭제(숨김)·복구 — 기숙사 삭제와 전체 삭제 내역·복구 */
 export function DeletionsPage({ me }: { me: Me | null }) {
@@ -20,7 +20,9 @@ export function DeletionsPage({ me }: { me: Me | null }) {
       {msg && <Notice tone="success" onClose={() => setMsg(null)}>{msg}</Notice>}
       <Dormitories key={`d${key}`} onChanged={changed} />
       <History key={`h${key}`} onChanged={changed} />
-      <p className="text-xs text-ink-3 px-1">차입금은 차입금 상세 화면 위쪽 '차입금 삭제', 원리금 테이블은 원리금 테이블 탭의 '원리금 테이블 삭제', 안내공문은 발급 이력의 '삭제'로 지웁니다.</p>
+      <p className="text-xs text-ink-3 px-1">차입금은 차입금 상세 위쪽 '차입금 삭제', 원리금 테이블은 원리금 테이블 탭의 '이 버전 삭제'·'전체 삭제',
+        이벤트는 이벤트 관리 › 이벤트 이력(또는 차입금 상세 › 이벤트·변경이력)의 '삭제', 안내공문은 발급 이력의 '삭제'로 지웁니다.
+        이벤트·버전은 가장 최근 것부터 지우고, 복구는 지운 반대 순서(나중에 지운 것부터)로 합니다.</p>
     </div>
   );
 }
@@ -82,7 +84,7 @@ function History({ onChanged }: { onChanged: (m: string) => void }) {
           </li>))}
         </ul>
       )}
-      <p className="mt-2 text-xs text-ink-3">기숙사를 복구하면 함께 삭제됐던 차입금도 돌아옵니다. 차입금 코드가 그사이 다른 차입금에 쓰였거나, 원리금 테이블을 새로 만든 경우에는 안내에 따라 먼저 정리한 뒤 복구합니다.</p>
+      <p className="mt-2 text-xs text-ink-3">이벤트·원리금 테이블 버전은 나중에 지운 것부터 복구합니다. 기숙사를 복구하면 함께 삭제됐던 차입금도 돌아옵니다. 차입금 코드가 그사이 다른 차입금에 쓰였거나, 원리금 테이블을 새로 만든 경우에는 안내에 따라 먼저 정리한 뒤 복구합니다.</p>
     </Card>
   );
 }

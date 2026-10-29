@@ -35,7 +35,7 @@ class EventCancelError(Exception):
 
 def cancel_event(db: Session, loan_id: uuid.UUID, event_id: uuid.UUID, *, reason: str, user_id: uuid.UUID | None) -> RepaymentScheduleVersion:
     event = db.get(LoanEvent, event_id)
-    if event is None or event.loan_id != loan_id:
+    if event is None or event.loan_id != loan_id or event.is_deleted:
         raise EventCancelError("이벤트를 찾을 수 없습니다.")
     if event.status == LoanEventStatus.CANCELLED:
         raise EventCancelError("이미 취소된 이벤트입니다.")
@@ -44,7 +44,7 @@ def cancel_event(db: Session, loan_id: uuid.UUID, event_id: uuid.UUID, *, reason
 
     latest = db.execute(
         select(LoanEvent)
-        .where(LoanEvent.loan_id == loan_id, LoanEvent.status == LoanEventStatus.APPLIED)
+        .where(LoanEvent.loan_id == loan_id, LoanEvent.status == LoanEventStatus.APPLIED, LoanEvent.is_deleted.is_(False))
         .order_by(LoanEvent.created_at.desc(), LoanEvent.id.desc())
     ).scalars().first()
     if latest is None or latest.id != event.id:

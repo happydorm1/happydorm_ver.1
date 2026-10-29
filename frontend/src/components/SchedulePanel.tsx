@@ -15,6 +15,7 @@ export function SchedulePanel({ loanId, loanCode, assigned, asOf, canDownload, c
   canNote?: boolean; canDelete?: boolean; onDeleted?: () => void;
 }) {
   const [delOpen, setDelOpen] = useState(false);
+  const [delVer, setDelVer] = useState(false);
   const { data: versions, error, loading, reload } = useAsync<ScheduleVersion[]>(() => api.versions(loanId), [loanId]);
   const [vno, setVno] = useState<number | null>(null);
   const [view, setView] = useState<"table" | "compare">("table");
@@ -71,7 +72,8 @@ export function SchedulePanel({ loanId, loanCode, assigned, asOf, canDownload, c
               </button>
             ))}
           </div>
-          {canDelete && <Button variant="danger" onClick={() => setDelOpen(true)}>원리금 테이블 삭제</Button>}
+          {canDelete && versions.length > 1 && sel.is_current && <Button variant="danger" onClick={() => setDelVer(true)}>이 버전(V{sel.version_no}) 삭제</Button>}
+          {canDelete && <Button variant="danger" onClick={() => setDelOpen(true)}>{versions.length > 1 ? "원리금 테이블 전체 삭제" : "원리금 테이블 삭제"}</Button>}
           {canDownload && (
             <Button onClick={() => downloadFile(`/loans/${loanId}/schedule/download`, { version_no: String(sel.version_no) },
               `${loanCode}_원리금테이블_v${sel.version_no}.xlsx`).catch((e) => setDlErr(e.message))}>Excel 다운로드</Button>
@@ -79,6 +81,12 @@ export function SchedulePanel({ loanId, loanCode, assigned, asOf, canDownload, c
         </div>
       </div>
       {dlErr && <Notice tone="error" onClose={() => setDlErr(null)}>{dlErr}</Notice>}
+      {delVer && <DeleteDialog title="원리금 테이블 버전 삭제" target={`${loanCode} 원리금 테이블 V${sel.version_no} (${sel.generated_reason})`}
+        effects={["현재 버전을 숨기고 직전 버전을 다시 현재 원리금 테이블로 씁니다.",
+          "이 버전을 만든 이벤트(금리변동·조기상환 등)도 함께 삭제되며, 금리변동·전액대환이었다면 금리이력·재원도 되돌립니다.",
+          "버전은 가장 최근 것부터 하나씩 지울 수 있습니다."]}
+        onClose={() => setDelVer(false)}
+        onConfirm={async (reason) => { await api.deleteVersion(sel.id, reason); setDelVer(false); setVno(null); reload(); onDeleted?.(); }} />}
       {delOpen && <DeleteDialog title="원리금 테이블 삭제" target={`${loanCode} 원리금 테이블 (V${versions.map((v) => v.version_no).join(", V")})`}
         effects={["이 차입금의 모든 버전이 숨겨지고, 차입금은 그대로 남습니다.",
           "삭제 후 계약조건(거치·상환기간 등)을 고치고 다시 생성할 수 있습니다. 새 테이블 번호는 이어서 매겨집니다.",
