@@ -12,6 +12,7 @@ import { LoansPage } from "./pages/loans/LoansPage";
 import { SchedulePage } from "./pages/SchedulePage";
 import { AuditPage, ReferencePage, UsersPage } from "./pages/admin/AdminPages";
 import { DeletionsPage } from "./pages/admin/DeletionsPage";
+import { MigrationPage } from "./pages/admin/MigrationPage";
 import { EventsPage } from "./pages/events/EventsPage";
 import { NoticesPage } from "./pages/NoticesPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
@@ -70,6 +71,7 @@ export default function App() {
     const tab = route.query.get("tab") ?? "";
     if (sub === "reference") { title = "기준정보"; page = <ReferencePage me={me} tab={tab} />; }
     else if (sub === "users") { title = "사용자·권한"; page = <UsersPage me={me} />; }
+    else if (sub === "migration") { title = "기존 차입금 이관"; page = <MigrationPage me={me} />; }
     else if (sub === "deletions") { title = "삭제·복구"; page = <DeletionsPage me={me} />; }
     else { title = "감사로그"; page = <AuditPage me={me} tab={tab} />; }
   }

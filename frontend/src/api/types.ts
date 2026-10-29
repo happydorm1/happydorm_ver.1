@@ -256,3 +256,16 @@ export interface DeletionRecord {
   deleted_by_name: string | null; restored_by_name: string | null;
 }
 export interface AdminDormitory { id: Id; dormitory_name: string; school_name: string; spc_name: string; loan_count: number; created_at: string }
+
+// ---------- Phase 19: 기존 차입금 일괄 이관 ----------
+export interface MigrationIssue { sheet: string; row: number | null; column: string | null; message: string }
+export interface MigrationResult {
+  ok: boolean; applied: boolean; batch_id: Id | null; errors: MigrationIssue[]; warnings: MigrationIssue[];
+  counts: { dorm_rows: number; loan_rows: number; rate_rows: number; exception_rows: number };
+  stats: Partial<Record<"spc_new" | "dorm_new" | "dorm_reused" | "loans" | "rates" | "versions" | "payments_full" | "payments_exception" | "unpaid_exceptions", number>>;
+}
+export interface MigrationBatch {
+  id: Id; file_name: string; cutoff_date: string; mark_paid: boolean; summary: Record<string, number>; loan_ids: Id[];
+  dormitory_ids: Id[]; created_at: string; created_by: Id | null; created_by_name: string | null;
+  cancelled_at: string | null; cancel_reason: string | null;
+}

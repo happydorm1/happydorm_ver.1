@@ -4,6 +4,7 @@ import type {
   AccessLogItem, AdminAuditItem, Backups, EventListItem, EventRequestItem, Holiday, Notice, NoticeData, NotificationItem,
   OverdueList, Payment, PaymentSummary, SecurityStatus, Template, UserItem,
   Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput, DeletionRecord, AdminDormitory,
+  MigrationBatch, MigrationResult,
 } from "./types";
 
 const TOKEN_KEY = "access_token";
@@ -126,6 +127,8 @@ export const api = {
   deactivateTemplate: (id: string) => request<Template>(`/document-templates/${id}/deactivate`, undefined, {}),
   adminDormitories: () => request<AdminDormitory[]>("/admin/dormitories"),
   deletions: (includeRestored = false) => request<DeletionRecord[]>("/admin/deletions", includeRestored ? { include_restored: "true" } : undefined),
+  migrationBatches: () => request<MigrationBatch[]>("/admin/migration/batches"),
+  cancelMigration: (id: string, reason: string) => request<{ loans: number; dormitories: number }>(`/admin/migration/batches/${id}/cancel`, undefined, { reason }),
   restoreDeletion: (id: string) => request<DeletionRecord>(`/admin/deletions/${id}/restore`, undefined, {}),
   deleteDormitory: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/dormitories/${id}`, undefined, { reason }),
   deleteLoan: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/loans/${id}`, undefined, { reason }),
@@ -213,4 +216,21 @@ export async function uploadAttachment(loanId: string, file: File, form: { owner
     throw new ApiError(res.status, detail);
   }
   return res.json() as Promise<Attachment>;
+}
+
+/** 기존 차입금 이관: 검사(validate) 또는 실행(apply) — 엑셀 파일·기준일·납부완료 처리 여부 */
+export async function runMigration(action: "validate" | "apply", file: File, cutoffDate: string, markPaid: boolean): Promise<MigrationResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("cutoff_date", cutoffDate);
+  fd.append("mark_paid", markPaid ? "true" : "false");
+  const res = await fetch(`/api/v1/admin/migration/${action}`, { method: "POST", body: fd,
+    headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {} });
+  if (res.status === 401) { auth.clear(); window.dispatchEvent(new Event("auth:expired")); throw new ApiError(401, "로그인이 만료되었습니다."); }
+  if (!res.ok) {
+    let detail = `요청 실패 (${res.status})`;
+    try { const b = await res.json(); if (typeof b.detail === "string") detail = b.detail; } catch { /* noop */ }
+    throw new ApiError(res.status, detail);
+  }
+  return res.json() as Promise<MigrationResult>;
 }

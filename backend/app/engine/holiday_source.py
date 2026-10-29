@@ -44,9 +44,14 @@ def parse_kasi_response(payload: dict) -> list[tuple[date, str]]:
     return out
 
 
+def normalize_service_key(key: str) -> str:
+    """공공데이터포털 키는 Encoding(%2B 등)·Decoding(+,/,=)·통합 키 어느 형태로 넣어도 되게 한 번 풀었다가 다시 인코딩한다."""
+    return urllib.parse.quote(urllib.parse.unquote(key.strip()), safe="")
+
+
 def http_fetcher(url: str, params: dict) -> dict:
-    """운영용: 표준 라이브러리로 호출(프록시 환경변수 자동 적용). 서비스키는 이미 인코딩된 값일 수 있어 그대로 붙인다."""
-    key = params.pop("ServiceKey")
+    """운영용: 표준 라이브러리로 호출(프록시 환경변수 자동 적용). 서비스키는 어떤 형태든 URL에 맞게 인코딩해 붙인다."""
+    key = normalize_service_key(params.pop("ServiceKey"))
     q = urllib.parse.urlencode(params)
     full = f"{url}?ServiceKey={key}&{q}"
     try:

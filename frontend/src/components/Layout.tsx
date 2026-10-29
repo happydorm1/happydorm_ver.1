@@ -15,7 +15,7 @@ export const MENU: { group: string; items: { label: string; route?: string; who?
     { label: "이벤트 관리", route: "events", who: "foundation" }] },
   { group: "상환", items: [{ label: "실제 상환관리", route: "payments" }, { label: "안내공문", route: "notices" }, { label: "알림", route: "notifications" }] },
   { group: "관리자", items: [{ label: "기준정보", route: "admin/reference", who: "writer" }, { label: "사용자·권한", route: "admin/users", who: "admin" },
-    { label: "감사로그", route: "admin/audit", who: "admin" }, { label: "삭제·복구", route: "admin/deletions", who: "admin" }] },
+    { label: "감사로그", route: "admin/audit", who: "admin" }, { label: "기존 차입금 이관", route: "admin/migration", who: "admin" }, { label: "삭제·복구", route: "admin/deletions", who: "admin" }] },
 ];
 function allowed(who: Who | undefined, role?: Role) {
   if (!who || who === "all") return true;

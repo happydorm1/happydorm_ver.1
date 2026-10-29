@@ -5,9 +5,9 @@ ERD 설계(2단계 산출물) 3번 '조직 테이블' 섹션 그대로 구현.
 import enum
 import uuid
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -114,3 +114,18 @@ class DeletionRecord(Base, AuditMixin):
     detail: Mapped[dict] = mapped_column(JSONB, nullable=False)               # 함께 숨긴 차입금·버전·알림, 원래 차입금 코드 등
     restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     restored_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class MigrationBatch(Base, AuditMixin):
+    """Phase 19: 기존 차입금 일괄 이관 기록 — 어떤 파일로·기준일 언제로 무엇을 만들었는지(대조표·이관 취소에 사용)."""
+    __tablename__ = "migration_batch"
+
+    file_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    cutoff_date: Mapped[date] = mapped_column(Date, nullable=False)
+    mark_paid: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    summary: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    loan_ids: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    dormitory_ids: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    cancel_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)

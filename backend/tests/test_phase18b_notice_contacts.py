@@ -101,3 +101,12 @@ def test_notice_pdf_download_when_libreoffice_installed():
     assert r.status_code == 200, r.text
     assert r.headers["content-type"] == "application/pdf" and r.content[:4] == b"%PDF"
     assert Path(notice_export.find_soffice()).exists()
+
+
+def test_service_key_any_form_is_encoded_once():
+    from app.engine.holiday_source import normalize_service_key
+    raw = "abc+DEF/ghi=="                      # Decoding 키(특수문자 그대로)
+    enc = "abc%2BDEF%2Fghi%3D%3D"              # Encoding 키
+    assert normalize_service_key(raw) == enc
+    assert normalize_service_key(enc) == enc   # 이미 인코딩된 키는 두 번 인코딩하지 않음
+    assert normalize_service_key(" 0123abcd ") == "0123abcd"
