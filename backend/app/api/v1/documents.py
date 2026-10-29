@@ -61,6 +61,7 @@ class NoticeRead(BaseModel):
     created_at: datetime
     created_by: uuid.UUID | None
     generated_data: dict
+    notified_users: int = 0                    # 발급 직후 응답에만: 시스템 알림을 받은 SPC 담당자 수
 
 
 def _template_out(t: DocumentTemplate) -> TemplateRead:
@@ -149,7 +150,9 @@ def create_notice(dormitory_id: uuid.UUID, payload: NoticeRequest, db: Session =
     except NoticeError as e:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(e))
-    return _notice_out(doc)
+    out = _notice_out(doc)
+    out.notified_users = getattr(doc, "notified_count", 0)
+    return out
 
 
 @router.get("/dormitories/{dormitory_id}/notices", response_model=list[NoticeRead])

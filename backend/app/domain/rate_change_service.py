@@ -118,7 +118,7 @@ def apply_rate_change(
     new_rows_data: list[engine.ScheduleRow] = []
     if cutover_row.installment_no is None:
         # 아직 거치기간 — 커트오버 지점부터 거치기간 잔여분 + 원금상환 전체를 재생성
-        new_rows_data += engine.generate_grace_period_rows(
+        grace_rows = engine.generate_grace_period_rows(
             assigned_amount=loan.assigned_amount,
             start_date=cutover_row.interest_calc_start,
             grace_end_date=loan.grace_end_date,
@@ -126,6 +126,7 @@ def apply_rate_change(
             rate_lookup=rate_lookup,
             rounding=loan.interest_rounding,
         )
+        new_rows_data += grace_rows
         new_rows_data += engine.generate_equal_principal_schedule(
             balance_start=loan.assigned_amount,
             assigned_amount=loan.assigned_amount,
@@ -133,7 +134,7 @@ def apply_rate_change(
             total_installments=total_installments,
             months_per_period=months_per_period,
             rate_lookup=rate_lookup,
-            period_start_date=loan.grace_end_date,
+            period_start_date=grace_rows[-1].due_date if grace_rows else loan.grace_end_date,   # 마지막 거치 납입일부터(기간 누락 방지)
             rounding=loan.interest_rounding,
         )
     else:

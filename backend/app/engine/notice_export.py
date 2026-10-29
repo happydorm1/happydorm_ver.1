@@ -5,6 +5,7 @@
 원본과 같이 파생 칸(이자기간·상환후잔액·원리금합계·합계·검증)은 수식으로 둔다.
 """
 import io
+import os
 import shutil
 import subprocess
 import tempfile
@@ -166,21 +167,44 @@ def build_notice_workbook(data: dict) -> bytes:
     return buf.getvalue()
 
 
+_DEFAULT_SOFFICE = (
+    r"C:\Program Files\LibreOffice\program\soffice.exe",
+    r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    "/usr/bin/soffice", "/usr/lib/libreoffice/program/soffice", "/opt/libreoffice/program/soffice",
+)
+INSTALL_HINT = ("서버(이 프로그램이 실행되는 PC)에 LibreOffice를 설치하면 PDF로 받을 수 있습니다. "
+                "Windows: libreoffice.org에서 내려받아 설치 후 프로그램 재시작 / "
+                "Codespaces·Linux: bash .devcontainer/install_pdf.sh. 그전까지는 Excel로 내려받으세요.")
+
+
+def find_soffice() -> str | None:
+    """LibreOffice 실행파일 찾기: 설정값(LIBREOFFICE_PATH) → PATH → 기본 설치 위치."""
+    from app.core.config import settings
+    if settings.LIBREOFFICE_PATH:
+        return settings.LIBREOFFICE_PATH if Path(settings.LIBREOFFICE_PATH).exists() else None
+    found = shutil.which("soffice") or shutil.which("libreoffice")
+    if found:
+        return found
+    return next((p for p in _DEFAULT_SOFFICE if Path(p).exists()), None)
+
+
 def convert_xlsx_to_pdf(xlsx_bytes: bytes) -> bytes:
     """LibreOffice(headless)로 PDF 변환. 서버에 LibreOffice가 없으면 PdfUnavailableError."""
-    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    soffice = find_soffice()
     if not soffice:
-        raise PdfUnavailableError("서버에 PDF 변환기(LibreOffice)가 설치되어 있지 않습니다. Excel로 내려받으세요.")
+        raise PdfUnavailableError("PDF 변환기(LibreOffice)를 찾지 못했습니다. " + INSTALL_HINT)
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "notice.xlsx"
         src.write_bytes(xlsx_bytes)
+        profile = (Path(tmp) / "lo_profile").resolve().as_uri()   # 매번 새 프로필 → 다른 LibreOffice 창·동시 변환과 충돌하지 않음
+        env = {**os.environ, "HOME": tmp}
         try:
             subprocess.run(
-                [soffice, "--headless", "--convert-to", "pdf", "--outdir", tmp, str(src)],
-                check=True, capture_output=True, timeout=120,
-                env={"HOME": tmp, "PATH": "/usr/bin:/bin"},
+                [soffice, f"-env:UserInstallation={profile}", "--headless", "--convert-to", "pdf", "--outdir", tmp, str(src)],
+                check=True, capture_output=True, timeout=120, env=env,
             )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
             raise PdfUnavailableError(f"PDF 변환에 실패했습니다: {e}")
         out = Path(tmp) / "notice.pdf"
         if not out.exists():

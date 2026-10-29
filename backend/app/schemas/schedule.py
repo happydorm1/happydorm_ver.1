@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.models.schedule import RowType, ScheduleVersionStatus
 
@@ -27,6 +27,7 @@ class RepaymentScheduleRowRead(BaseModel):
     applied_rate: float
     row_type: RowType
     memo_interest: float | None
+    year_interest: int = 0                    # 기간귀속 이자(1/1~12/31 결산용, engine/year_attribution.py)
     remark: str | None
 
 
@@ -40,3 +41,11 @@ class RepaymentScheduleVersionRead(BaseModel):
     status: ScheduleVersionStatus
     validation_errors: list[str] | None
     rows: list[RepaymentScheduleRowRead] = []
+
+    @model_validator(mode="after")
+    def _fill_year_interest(self):
+        from app.engine.year_attribution import year_attributed_interest
+        ordered = sorted(self.rows, key=lambda r: r.seq_no)
+        for r, v in zip(ordered, year_attributed_interest(ordered)):
+            r.year_interest = v
+        return self

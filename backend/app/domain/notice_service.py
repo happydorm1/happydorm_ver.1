@@ -21,7 +21,8 @@ from app.engine.business_day import effective_due_date, is_business_day, non_bus
 from app.models.document import DocumentTemplate, GeneratedDocument
 from app.models.event import Acceleration, LoanEvent, LoanEventStatus
 from app.models.loan import Loan
-from app.models.organization import Dormitory
+from app.models.notification import Notification
+from app.models.organization import Dormitory, User, UserRole
 from app.models.reference import Code, Fund, InterestMethod
 
 IPMT_NOTE = "초록 음영표시한 융자 건의 경우, IPMT함수를 적용해 이자 산출함"
@@ -198,6 +199,35 @@ def issue_notice(
         record_audit(db, table_name="generated_document", record_id=doc.id, loan_id=uuid.UUID(src["loan_id"]),
                      action="CREATE", user_id=user_id, field="title", before=None,
                      after=f"{data['title']} / 납부기한 {data['payment_deadline']}")
+    notified = notify_notice_issued(db, dormitory, doc, data)
     db.commit()
     db.refresh(doc)
+    doc.notified_count = notified          # 응답용(저장 칼럼 아님)
     return doc
+
+
+def notify_notice_issued(db: Session, dormitory: Dormitory, doc: GeneratedDocument, data: dict) -> int:
+    """공문 발급 → 그 기숙사 SPC 담당자에게 시스템 알림(알림함). 같은 상환일 공문을 다시 발급하면 기존 알림을 새 내용으로 갱신."""
+    if not data.get("sources"):
+        return 0
+    users = db.execute(select(User).where(User.role == UserRole.SPC_MANAGER, User.spc_id == dormitory.spc_id,
+                                          User.is_active.is_(True), User.is_deleted.is_(False))).scalars().all()
+    loan_id = uuid.UUID(data["sources"][0]["loan_id"])
+    t = data["totals"]
+    title = f"[안내공문] {doc.title}"
+    body = (f"상환예정일 {doc.due_date} · 납부기한 {doc.payment_deadline} · 납부금액 {t['total']:,}원"
+            f"(원금 {t['principal']:,} / 이자 {t['interest']:,}). 안내공문 메뉴의 발급 이력에서 Excel·PDF로 내려받을 수 있습니다.")
+    payload = {"notice_id": str(doc.id), "dormitory_id": str(dormitory.id), "due_date": str(doc.due_date),
+               "payment_deadline": str(doc.payment_deadline), "total": t["total"]}
+    for u in users:
+        n = db.execute(select(Notification).where(Notification.recipient_user_id == u.id, Notification.loan_id == loan_id,
+                                                  Notification.notification_type == "NOTICE_ISSUED",
+                                                  Notification.reference_date == doc.due_date)).scalar_one_or_none()
+        if n is None:
+            db.add(Notification(recipient_user_id=u.id, loan_id=loan_id, dormitory_id=dormitory.id,
+                                notification_type="NOTICE_ISSUED", reference_date=doc.due_date, trigger_date=date.today(),
+                                title=title, body=body, payload=payload, created_by=doc.created_by))
+        else:
+            n.title, n.body, n.payload, n.trigger_date = title, body, payload, date.today()
+            n.is_read, n.read_at = False, None
+    return len(users)

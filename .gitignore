@@ -1,0 +1,12 @@
+# 비밀키·DB 비밀번호·데이터는 올리지 않는다
+.env
+**/.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+frontend/dist/
+backend/backups/
+backend/attachments/
+.pytest_cache/

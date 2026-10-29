@@ -56,7 +56,7 @@ def generate_initial_schedule(
 
     # 거치기간
     if loan.grace_start_date and loan.grace_end_date:
-        rows += engine.generate_grace_period_rows(
+        grace_rows = engine.generate_grace_period_rows(
             assigned_amount=loan.assigned_amount,
             start_date=loan.grace_start_date,
             grace_end_date=loan.grace_end_date,
@@ -64,7 +64,10 @@ def generate_initial_schedule(
             rate_lookup=rate_lookup,
             rounding=loan.interest_rounding,
         )
-        period_start_date = loan.grace_end_date
+        rows += grace_rows
+        # 상환기간은 '마지막 거치 이자 납입일'부터 이어진다. 거치종료일이 납입일 사이(예: 12/31)에 있어도
+        # 그 사이 기간이 빠지지 않게 한다(검증된 원본 사례는 거치종료일=마지막 납입일이라 결과 동일).
+        period_start_date = grace_rows[-1].due_date if grace_rows else loan.grace_start_date
     else:
         period_start_date = loan.assigned_date
 

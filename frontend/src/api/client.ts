@@ -3,7 +3,7 @@ import type {
   RateHistory, RateInput, ScheduleVersion, Spc, Verification,
   AccessLogItem, AdminAuditItem, Backups, EventListItem, EventRequestItem, Holiday, Notice, NoticeData, NotificationItem,
   OverdueList, Payment, PaymentSummary, SecurityStatus, Template, UserItem,
-  Attachment, AttachmentSettings, ScheduleNote,
+  Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput,
 } from "./types";
 
 const TOKEN_KEY = "access_token";
@@ -124,6 +124,11 @@ export const api = {
   templates: () => request<Template[]>("/document-templates"),
   createTemplate: (body: Record<string, unknown>) => request<Template>("/document-templates", undefined, body),
   deactivateTemplate: (id: string) => request<Template>(`/document-templates/${id}/deactivate`, undefined, {}),
+  contacts: (dormId: string, includeInactive = false) =>
+    request<Contact[]>(`/dormitories/${dormId}/contacts`, includeInactive ? { include_inactive: "true" } : undefined),
+  createContact: (dormId: string, body: ContactInput) => request<Contact>(`/dormitories/${dormId}/contacts`, undefined, body),
+  updateContact: (id: string, body: ContactInput) => request<Contact>(`/contacts/${id}`, undefined, body, "PUT"),
+  deactivateContact: (id: string, reason: string) => request<Contact>(`/contacts/${id}/deactivate`, undefined, { reason }),
   noticePreview: (dormId: string, p: Record<string, string | undefined>) => request<NoticeData>(`/dormitories/${dormId}/notices/preview`, p),
   issueNotice: (dormId: string, body: Record<string, unknown>) => request<Notice>(`/dormitories/${dormId}/notices`, undefined, body),
   notices: (dormId: string) => request<Notice[]>(`/dormitories/${dormId}/notices`),

@@ -34,6 +34,7 @@ from app.domain.version_utils import NoScheduleError, get_current_version, read_
 from app.engine.business_day import effective_due_date
 from app.domain.attachment_service import notes_by_due_date, remark_with_note
 from app.engine.excel_export import HEADER as SCHEDULE_HEADER
+from app.engine.year_attribution import year_attributed_interest
 from app.models.event import EventRequest, LoanEvent
 from app.models.loan import InterestRateHistory
 from app.models.organization import User
@@ -71,12 +72,13 @@ def _sheet(wb, title, header, rows, money_cols=(), widths=None):
 def _schedule_rows(loan, version, notes=None):
     notes = notes or {}
     out = []
-    for r in sorted(version.rows, key=lambda x: x.seq_no):
+    ordered = sorted(version.rows, key=lambda x: x.seq_no)
+    for r, att in zip(ordered, year_attributed_interest(ordered)):
         p = r.principal_total
         out.append([r.seq_no, loan.loan_code, r.due_date, r.interest_calc_start, r.interest_calc_end, r.days, r.installment_no,
                     r.balance_before, round(p / loan.assigned_amount, 5) if loan.assigned_amount else 0, p, r.interest_amount,
                     r.unpaid_interest_amount, r.interest_total, r.principal_and_interest_total, r.balance_after, float(r.applied_rate),
-                    remark_with_note(r.remark or r.row_type.value, notes.get((loan.id, r.due_date)))])
+                    remark_with_note(r.remark or r.row_type.value, notes.get((loan.id, r.due_date))), att])
     return out
 
 
@@ -106,7 +108,7 @@ def build_report(db: Session, user: User, kind: str, *, dormitory_id=None, fund_
                 except NoScheduleError:
                     continue
                 name = f"{dorm.dormitory_name[:12]}_{loan.loan_code[-12:]}"
-                _sheet(wb, name, SCHEDULE_HEADER, _schedule_rows(loan, v, notes), money_cols=(8, 10, 11, 12, 13, 14, 15))
+                _sheet(wb, name, SCHEDULE_HEADER, _schedule_rows(loan, v, notes), money_cols=(8, 10, 11, 12, 13, 14, 15, 18))
         elif kind == "period_repayments":
             rows = []
             for loan, dorm, fund in loans:

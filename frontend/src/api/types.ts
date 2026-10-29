@@ -131,7 +131,7 @@ export interface ScheduleRow {
   installment_no: number | null; balance_before: number; principal_amount: number; deferral_recovery_principal: number;
   principal_total: number; interest_amount: number; unpaid_interest_amount: number; interest_total: number;
   principal_and_interest_total: number; balance_after: number; applied_rate: number; row_type: string;
-  memo_interest: number | null; remark: string | null;
+  memo_interest: number | null; year_interest: number; remark: string | null;
 }
 export interface ScheduleVersion {
   id: Id; loan_id: Id; version_no: number; generated_reason: string; is_current: boolean;
@@ -202,8 +202,13 @@ export interface NoticeData {
 }
 export interface Notice {
   id: Id; dormitory_id: Id; due_date: string; payment_deadline: string; title: string; created_at: string;
-  created_by: Id | null; generated_data: NoticeData;
+  created_by: Id | null; generated_data: NoticeData; notified_users?: number;
 }
+export interface Contact {
+  id: Id; dormitory_id: Id; name: string; organization: string | null; position: string | null; email: string | null;
+  phone: string | null; is_primary: boolean; note: string | null; is_active: boolean;
+}
+export type ContactInput = Omit<Contact, "id" | "dormitory_id" | "is_active">;
 export interface NotificationItem {
   id: Id; loan_id: Id; dormitory_id: Id; notification_type: string; reference_date: string; trigger_date: string;
   title: string; body: string; payload: Record<string, unknown>; channel: string; is_read: boolean; created_at: string;

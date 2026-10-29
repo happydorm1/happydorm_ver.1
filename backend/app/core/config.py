@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     BACKUP_ALERT_HOURS: int = 36            # 이 시간 넘게 성공한 백업이 없으면 관리자에게 안내
     # 증빙자료 첨부(Phase 17) — 백업 대상에 이 폴더도 포함할 것(DB 백업에는 파일 본문이 들어가지 않는다)
     ATTACHMENT_DIR: str = "./attachments"
+    # 공문 PDF 변환기(LibreOffice) 실행파일 경로. 비우면 PATH와 기본 설치 위치(Windows·Mac)를 자동으로 찾는다
+    LIBREOFFICE_PATH: str = ""
     ATTACHMENT_MAX_MB: int = 20
     ATTACHMENT_EXTENSIONS: str = "pdf,hwp,hwpx,doc,docx,xls,xlsx,csv,ppt,pptx,jpg,jpeg,png,gif,txt,zip"
 

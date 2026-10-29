@@ -122,7 +122,7 @@ function VerificationCard({ loanId, versionNo }: { loanId: string; versionNo: nu
 }
 
 const HEAD = ["연번", "상환예정일", "이자계산시작", "이자계산끝", "일수", "회차", "상환 전 원금", "원금상환비율", "원금상환액",
-  "이자", "미지급이자", "이자상환액", "원리금상환액", "상환 후 잔액", "적용금리", "비고"];
+  "이자", "미지급이자", "이자상환액", "기간귀속이자", "원리금상환액", "상환 후 잔액", "적용금리", "비고"];
 
 function ScheduleTable({ version, assigned, asOf, loanId, canNote }: {
   version: ScheduleVersion; assigned: number; asOf: string; loanId: string; canNote: boolean;
@@ -154,10 +154,12 @@ function ScheduleTable({ version, assigned, asOf, loanId, canNote }: {
           <input type="checkbox" checked={hidePast} onChange={(e) => setHidePast(e.target.checked)} /> 기준일({asOf}) 이전 회차 숨기기
         </label>
       </div>
+      <YearlySummary rows={rows} />
       <div className="overflow-auto max-h-[70vh]">
         <table className="w-full text-xs tabular">
           <thead className="sticky top-0 bg-surface-2 z-10">
-            <tr>{HEAD.map((h, i) => <th key={h} scope="col" className={`px-2 py-2 font-medium text-ink-2 whitespace-nowrap ${i >= 4 && i !== 15 ? "text-right" : "text-left"}`}>{h}</th>)}</tr>
+            <tr>{HEAD.map((h, i) => <th key={h} scope="col" className={`px-2 py-2 font-medium text-ink-2 whitespace-nowrap ${i >= 4 && h !== "비고" ? "text-right" : "text-left"}`}
+              title={h === "기간귀속이자" ? "결산용: 이자계산기간을 12/31로 나눠 일수 비율로 연도에 귀속한 이자" : undefined}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {shown.map((r) => <Row key={r.id} r={r} assigned={assigned} next={rows[nextIdx]?.id === r.id}
@@ -168,11 +170,66 @@ function ScheduleTable({ version, assigned, asOf, loanId, canNote }: {
       </div>
       <p className="px-4 py-2 text-[11px] text-ink-3 border-t border-line">
         이자계산은 초일 산입·말일 불산입. 원금상환액에는 그 회차에 함께 회수하는 상환유예 원금이 포함됩니다. 연도경계(메모) 행은 참고용으로 금액 합계에서 빠집니다.
+        기간귀속이자는 결산용 참고값으로, 원리금균등 회차처럼 이자가 납입일 행에 한꺼번에 실리는 경우 12/31 앞·뒤 일수 비율로 나눠 보여줍니다(합계는 이자와 같음).
         사용자 메모는 상환일에 붙어 버전이 바뀌어도 그대로 보이며, Excel 비고에도 함께 나갑니다.
       </p>
       {noteFor && <NoteDialog loanId={loanId} dueDate={noteFor} notes={byDate.get(noteFor) ?? []} canNote={canNote}
         onClose={() => setNoteFor(null)} onChanged={reloadNotes} />}
     </section>
+  );
+}
+
+/** 결산용 연도별 집계(1/1~12/31) — 서버 Excel '연도별 집계' 시트와 같은 규칙 */
+function YearlySummary({ rows }: { rows: ScheduleRow[] }) {
+  const [open, setOpen] = useState(false);
+  const years = useMemo(() => {
+    const m = new Map<number, { p: number; i: number; a: number }>();
+    const b = (y: number) => { if (!m.has(y)) m.set(y, { p: 0, i: 0, a: 0 }); return m.get(y)!; };
+    rows.forEach((r) => {
+      if (r.row_type !== "YEAR_END_SPLIT_MEMO") {
+        const x = b(Number(r.due_date.slice(0, 4))); x.p += r.principal_total; x.i += r.interest_total;
+      }
+      b(Number(r.interest_calc_end.slice(0, 4))).a += r.year_interest + r.unpaid_interest_amount;
+    });
+    return [...m.entries()].sort((x, y) => x[0] - y[0]);
+  }, [rows]);
+  const sum = years.reduce((s, [, v]) => ({ p: s.p + v.p, i: s.i + v.i, a: s.a + v.a }), { p: 0, i: 0, a: 0 });
+  return (
+    <div className="border-b border-line">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm">
+        <span className="font-medium">연도별 집계 (1/1~12/31, 결산용)</span>
+        <span className="ml-auto text-xs text-ink-2">{open ? "접기 ▲" : "펼치기 ▼"}</span>
+      </button>
+      {open && (
+        <div className="overflow-auto px-4 pb-3">
+          <table className="w-full max-w-3xl text-xs tabular" aria-label="연도별 집계">
+            <thead><tr className="text-ink-2">
+              <th scope="col" className="px-2 py-1.5 text-left font-medium">연도</th>
+              <th scope="col" className="px-2 py-1.5 text-right font-medium">원금상환액<span className="block text-[10px]">납입일 기준</span></th>
+              <th scope="col" className="px-2 py-1.5 text-right font-medium">이자상환액<span className="block text-[10px]">납입일 기준</span></th>
+              <th scope="col" className="px-2 py-1.5 text-right font-medium">기간귀속 이자<span className="block text-[10px]">1/1~12/31 일수 기준</span></th>
+            </tr></thead>
+            <tbody>
+              {years.map(([y, v]) => (
+                <tr key={y} className="border-t border-line">
+                  <td className="px-2 py-1">{y}</td>
+                  <td className="px-2 py-1 text-right">{num(v.p)}</td>
+                  <td className="px-2 py-1 text-right">{num(v.i)}</td>
+                  <td className="px-2 py-1 text-right">{num(v.a)}</td>
+                </tr>
+              ))}
+              <tr className="border-t border-line font-semibold">
+                <td className="px-2 py-1">합계</td>
+                <td className="px-2 py-1 text-right">{num(sum.p)}</td>
+                <td className="px-2 py-1 text-right">{num(sum.i)}</td>
+                <td className="px-2 py-1 text-right">{num(sum.a)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -195,6 +252,7 @@ function Row({ r, assigned, next, notes, onNote }: { r: ScheduleRow; assigned: n
       <td className="px-2 py-1.5 text-right">{num(r.interest_amount)}</td>
       <td className="px-2 py-1.5 text-right">{r.unpaid_interest_amount ? num(r.unpaid_interest_amount) : ""}</td>
       <td className="px-2 py-1.5 text-right">{num(r.interest_total)}</td>
+      <td className={`px-2 py-1.5 text-right ${memo ? "not-italic text-ink-2" : ""}`}>{num(r.year_interest)}</td>
       <td className="px-2 py-1.5 text-right font-medium">{num(r.principal_and_interest_total)}</td>
       <td className="px-2 py-1.5 text-right">{num(r.balance_after)}</td>
       <td className="px-2 py-1.5 text-right">{pct(Number(r.applied_rate))}</td>

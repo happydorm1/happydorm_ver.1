@@ -81,6 +81,7 @@ def test_version_list_and_excel_download():
     ws = wb.active
     header = [c.value for c in ws[1]]
     assert header[0] == "연번"
-    assert header[-1] == "비고"
+    assert header[16] == "비고"                                  # §19 17개 열은 위치 그대로
+    assert header[-1] == "기간귀속 이자(1/1~12/31)"              # Phase 18: 결산용 열은 맨 뒤에 추가
     # 데이터 행 수가 실제 생성된 행 수와 일치
     assert ws.max_row - 1 == len(versions[0]["rows"])

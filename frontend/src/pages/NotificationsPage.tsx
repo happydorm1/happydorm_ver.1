@@ -7,6 +7,7 @@ import { href } from "../lib/router";
 
 const TYPE: Record<string, { label: string; tone: "warning" | "critical" | "brand" }> = {
   RATE_CHANGE_D30: { label: "금리변동", tone: "warning" },
+  NOTICE_ISSUED: { label: "공문 발급", tone: "brand" },
 };
 const label = (t: string) => TYPE[t] ?? (t.startsWith("REPAYMENT_D") ? { label: `상환 D-${t.slice(11)}`, tone: "brand" as const } : { label: t, tone: "brand" as const });
 

@@ -86,3 +86,18 @@ class Dormitory(Base, AuditMixin):
 
     def __repr__(self) -> str:
         return f"<Dormitory {self.dormitory_name}>"
+
+
+class DormitoryContact(Base, AuditMixin):
+    """Phase 18: 기숙사별 공문 수신처·연락처(학교·SPC 담당자). 지우지 않고 사용중지(is_active=False)."""
+    __tablename__ = "dormitory_contact"
+
+    dormitory_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("dormitory.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)                         # 담당자 이름
+    organization: Mapped[str | None] = mapped_column(String(100), nullable=True)          # 소속(학교·SPC·기관)
+    position: Mapped[str | None] = mapped_column(String(100), nullable=True)              # 부서·직위
+    email: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    is_primary: Mapped[bool] = mapped_column(default=False, nullable=False)               # 주 수신처(메일 받는 사람)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
