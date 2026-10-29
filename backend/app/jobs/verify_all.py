@@ -20,7 +20,8 @@ def run(all_versions: bool = False) -> dict:
         results = []
         for loan in db.execute(select(Loan).where(Loan.is_deleted.is_(False)).order_by(Loan.loan_code)).scalars():
             nos = [None] if not all_versions else [v for (v,) in db.execute(
-                select(RepaymentScheduleVersion.version_no).where(RepaymentScheduleVersion.loan_id == loan.id)
+                select(RepaymentScheduleVersion.version_no).where(RepaymentScheduleVersion.loan_id == loan.id,
+                                                                  RepaymentScheduleVersion.is_deleted.is_(False))
                 .order_by(RepaymentScheduleVersion.version_no))]
             for no in nos:
                 r = verify_loan(db, loan.id, no)

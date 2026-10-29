@@ -123,7 +123,8 @@ def verify_version(db: Session, loan: Loan, version: RepaymentScheduleVersion) -
 
 def verify_loan(db: Session, loan_id: uuid.UUID, version_no: int | None = None) -> dict | None:
     loan = db.get(Loan, loan_id)
-    q = select(RepaymentScheduleVersion).options(selectinload(RepaymentScheduleVersion.rows)).where(RepaymentScheduleVersion.loan_id == loan_id)
+    q = select(RepaymentScheduleVersion).options(selectinload(RepaymentScheduleVersion.rows)).where(
+        RepaymentScheduleVersion.loan_id == loan_id, RepaymentScheduleVersion.is_deleted.is_(False))
     q = q.where(RepaymentScheduleVersion.version_no == version_no) if version_no else q.where(RepaymentScheduleVersion.is_current.is_(True))
     v = db.execute(q).scalar_one_or_none()
     return verify_version(db, loan, v) if (loan and v) else None

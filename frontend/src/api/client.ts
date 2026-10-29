@@ -3,7 +3,7 @@ import type {
   RateHistory, RateInput, ScheduleVersion, Spc, Verification,
   AccessLogItem, AdminAuditItem, Backups, EventListItem, EventRequestItem, Holiday, Notice, NoticeData, NotificationItem,
   OverdueList, Payment, PaymentSummary, SecurityStatus, Template, UserItem,
-  Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput,
+  Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput, DeletionRecord, AdminDormitory,
 } from "./types";
 
 const TOKEN_KEY = "access_token";
@@ -124,6 +124,13 @@ export const api = {
   templates: () => request<Template[]>("/document-templates"),
   createTemplate: (body: Record<string, unknown>) => request<Template>("/document-templates", undefined, body),
   deactivateTemplate: (id: string) => request<Template>(`/document-templates/${id}/deactivate`, undefined, {}),
+  adminDormitories: () => request<AdminDormitory[]>("/admin/dormitories"),
+  deletions: (includeRestored = false) => request<DeletionRecord[]>("/admin/deletions", includeRestored ? { include_restored: "true" } : undefined),
+  restoreDeletion: (id: string) => request<DeletionRecord>(`/admin/deletions/${id}/restore`, undefined, {}),
+  deleteDormitory: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/dormitories/${id}`, undefined, { reason }),
+  deleteLoan: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/loans/${id}`, undefined, { reason }),
+  deleteSchedule: (loanId: string, reason: string) => request<DeletionRecord>(`/admin/delete/loans/${loanId}/schedule`, undefined, { reason }),
+  deleteNotice: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/notices/${id}`, undefined, { reason }),
   contacts: (dormId: string, includeInactive = false) =>
     request<Contact[]>(`/dormitories/${dormId}/contacts`, includeInactive ? { include_inactive: "true" } : undefined),
   createContact: (dormId: string, body: ContactInput) => request<Contact>(`/dormitories/${dormId}/contacts`, undefined, body),

@@ -101,3 +101,16 @@ class DormitoryContact(Base, AuditMixin):
     is_primary: Mapped[bool] = mapped_column(default=False, nullable=False)               # 주 수신처(메일 받는 사람)
     note: Mapped[str | None] = mapped_column(String(300), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+
+class DeletionRecord(Base, AuditMixin):
+    """Phase 18c: 관리자 삭제(숨김) 기록 — 무엇을·왜·누가 지웠는지, 함께 숨긴 항목, 복구 여부. 이 기록으로 그대로 되돌린다."""
+    __tablename__ = "deletion_record"
+
+    target_type: Mapped[str] = mapped_column(String(20), nullable=False)      # DORMITORY / LOAN / SCHEDULE / NOTICE
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(300), nullable=False)           # 화면 표시용(기숙사명·차입금 코드·공문 제목)
+    reason: Mapped[str] = mapped_column(String(300), nullable=False)
+    detail: Mapped[dict] = mapped_column(JSONB, nullable=False)               # 함께 숨긴 차입금·버전·알림, 원래 차입금 코드 등
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    restored_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

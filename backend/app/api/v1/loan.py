@@ -116,7 +116,8 @@ def update_loan(
     if contract_fields:
         # §50: 기존 데이터를 임의로 덮어쓰지 않는다 — 원리금 테이블이 이미 있으면 계약조건은 이벤트로만 변경
         has_schedule = db.execute(
-            select(RepaymentScheduleVersion.id).where(RepaymentScheduleVersion.loan_id == loan_id)
+            select(RepaymentScheduleVersion.id).where(RepaymentScheduleVersion.loan_id == loan_id,
+                                                      RepaymentScheduleVersion.is_deleted.is_(False))
         ).first()
         if has_schedule:
             raise HTTPException(

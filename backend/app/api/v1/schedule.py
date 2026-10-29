@@ -67,7 +67,7 @@ def list_versions(
     stmt = (
         select(RepaymentScheduleVersion)
         .options(selectinload(RepaymentScheduleVersion.rows))
-        .where(RepaymentScheduleVersion.loan_id == loan_id)
+        .where(RepaymentScheduleVersion.loan_id == loan_id, RepaymentScheduleVersion.is_deleted.is_(False))
         .order_by(RepaymentScheduleVersion.version_no)
     )
     return db.execute(stmt).scalars().all()
@@ -88,7 +88,7 @@ def download_schedule_excel(
         raise HTTPException(status_code=404, detail="차입금을 찾을 수 없습니다.")
 
     stmt = select(RepaymentScheduleVersion).options(selectinload(RepaymentScheduleVersion.rows)).where(
-        RepaymentScheduleVersion.loan_id == loan_id
+        RepaymentScheduleVersion.loan_id == loan_id, RepaymentScheduleVersion.is_deleted.is_(False)
     )
     stmt = stmt.where(
         RepaymentScheduleVersion.version_no == version_no

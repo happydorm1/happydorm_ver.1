@@ -78,7 +78,8 @@ def _require_pending(r: EventRequest):
 def list_requests(status: EventRequestStatus | None = EventRequestStatus.REQUESTED, loan_id: uuid.UUID | None = None,
                   limit: int = Query(100, ge=1, le=500), db: Session = Depends(get_db),
                   current_user: User = Depends(require_roles(*FOUNDATION))):
-    q = select(EventRequest).where(EventRequest.is_deleted.is_(False))
+    q = (select(EventRequest).join(Loan, Loan.id == EventRequest.loan_id)          # 삭제(숨김)된 차입금의 기안은 숨김
+         .where(EventRequest.is_deleted.is_(False), Loan.is_deleted.is_(False)))
     if status:
         q = q.where(EventRequest.status == status)
     if loan_id:

@@ -40,7 +40,8 @@ def generate_initial_schedule(
         raise ScheduleGenerationError("차입금을 찾을 수 없습니다.")
 
     existing = db.execute(
-        select(RepaymentScheduleVersion).where(RepaymentScheduleVersion.loan_id == loan_id)
+        select(RepaymentScheduleVersion).where(RepaymentScheduleVersion.loan_id == loan_id,
+                                               RepaymentScheduleVersion.is_deleted.is_(False))
     ).first()
     if existing:
         raise ScheduleGenerationError("이미 생성된 원리금 테이블이 있습니다.")
@@ -96,9 +97,13 @@ def generate_initial_schedule(
 
     validation = engine.validate_schedule(rows, loan.assigned_amount)
 
+    # 삭제(숨김)된 이전 테이블이 있으면 번호를 이어서 매긴다 — 이미 발급한 공문의 '근거 V1' 등과 헷갈리지 않게
+    from sqlalchemy import func
+    last_no = db.execute(select(func.max(RepaymentScheduleVersion.version_no))
+                         .where(RepaymentScheduleVersion.loan_id == loan_id)).scalar() or 0
     version = RepaymentScheduleVersion(
         loan_id=loan_id,
-        version_no=1,
+        version_no=last_no + 1,
         generated_reason="최초생성",
         is_current=True,
         status=ScheduleVersionStatus.NORMAL if validation.is_valid else ScheduleVersionStatus.NEEDS_REVIEW,

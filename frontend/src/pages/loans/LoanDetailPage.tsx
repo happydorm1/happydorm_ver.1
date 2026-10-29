@@ -8,7 +8,9 @@ import {
 } from "../../components/ui";
 import { takeFlash } from "../../lib/flash";
 import { pct, won } from "../../lib/format";
-import { canSeeHistory, canWrite } from "../../lib/perm";
+import { canSeeHistory, canWrite, isAdmin } from "../../lib/perm";
+import { DeleteDialog } from "../../components/DeleteDialog";
+import { setFlash as setNextFlash } from "../../lib/flash";
 import { LOAN_STATUS, RATE_TYPE, useRefData } from "../../lib/refdata";
 import { go, href } from "../../lib/router";
 
@@ -22,6 +24,7 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
   const { data: loan, error, reload } = useAsync<Loan>(() => api.loan(id), [id]);
   const [flash, setFlash] = useState<string | null>(null);
   const [schedKey, setSchedKey] = useState(0);
+  const [delOpen, setDelOpen] = useState(false);
   useEffect(() => { setFlash(takeFlash()); }, [id]);
 
   if (error) return <div className="space-y-3"><PageHeader title="차입금" back={{ href: href("loans"), label: "차입금 목록" }} /><Notice tone="error">{error}</Notice></div>;
@@ -38,7 +41,13 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
       <PageHeader back={{ href: href("loans"), label: "차입금 목록" }}
         title={<span>{dorm?.dormitory_name ?? "…"} <span className="text-ink-2 font-normal">· {loan.loan_code}</span></span>}
         sub={<span className="flex flex-wrap items-center gap-2">{dorm?.school_name} · {fund?.fund_name} · {RATE_TYPE[loan.rate_type]}
-          · 배정 {won(loan.assigned_amount)} <Badge tone={st.tone}>{st.label}</Badge></span>} />
+          · 배정 {won(loan.assigned_amount)} <Badge tone={st.tone}>{st.label}</Badge></span>}
+        actions={isAdmin(me) && <Button size="sm" variant="danger" onClick={() => setDelOpen(true)}>차입금 삭제</Button>} />
+      {delOpen && <DeleteDialog title="차입금 삭제" target={`${dorm?.dormitory_name ?? ""} · ${loan.loan_code}`}
+        effects={["이 차입금과 원리금 테이블·납부·알림이 모든 화면·대시보드·Excel·공문 작성에서 빠집니다.",
+          "삭제 중에는 같은 차입금 코드로 새로 등록할 수 있습니다."]}
+        onClose={() => setDelOpen(false)}
+        onConfirm={async (reason) => { await api.deleteLoan(loan.id, reason); setNextFlash(`차입금 '${loan.loan_code}'을(를) 삭제했습니다. 관리자 › 삭제·복구에서 되살릴 수 있습니다.`); go("loans"); }} />}
       {flash && <Notice tone="success" onClose={() => setFlash(null)}>{flash}</Notice>}
       <Tabs label="차입금 상세" value={tab} onChange={setTab} tabs={[
         { value: "info", label: "기본정보" }, { value: "rates", label: "금리이력", count: activeRates.length },
@@ -47,7 +56,9 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
       {tab === "info" && <InfoTab loan={loan} writable={writable} onSaved={(m) => { setFlash(m); reload(); }} />}
       {tab === "rates" && <RatesTab loan={loan} writable={writable} onSaved={(m) => { setFlash(m); reload(); setSchedKey((k) => k + 1); }} />}
       {tab === "schedule" && <SchedulePanel key={schedKey} loanId={loan.id} loanCode={loan.loan_code} assigned={loan.assigned_amount} asOf={asOf}
-        canDownload={me?.can_download ?? false} canGenerate={writable} onGenerated={() => setFlash("원리금 테이블 V1을 만들었습니다.")} />}
+        canDownload={me?.can_download ?? false} canGenerate={writable} canDelete={isAdmin(me)}
+        onGenerated={() => { setFlash("원리금 테이블을 만들었습니다."); reload(); }}
+        onDeleted={() => { setFlash("원리금 테이블을 삭제했습니다. 필요하면 계약조건을 고친 뒤 다시 생성하세요(관리자 › 삭제·복구에서 되살릴 수도 있습니다)."); reload(); setSchedKey((k) => k + 1); }} />}
       {tab === "evidence" && <AttachmentPanel loanId={loan.id} writable={writable} canDownload={me?.can_download ?? false}
         title="증빙자료 — 이 차입금 전체"
         hint="약정서·상환유예 승인 공문·조기상환 근거 등. 여기서 올리면 '차입금' 첨부가 되고, 이벤트·기안·납부에 올린 자료도 함께 보입니다." />}

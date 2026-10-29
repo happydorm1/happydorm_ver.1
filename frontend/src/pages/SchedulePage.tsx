@@ -34,7 +34,8 @@ export function SchedulePage({ me, asOf, loanId }: { me: Me | null; asOf: string
         </section>
       )}
       {sel ? <SchedulePanel loanId={sel.loan_id} loanCode={sel.loan_code} assigned={sel.assigned_amount} asOf={asOf}
-        canDownload={me?.can_download ?? false} canGenerate={me?.role === "SYSTEM_ADMIN" || me?.role === "FOUNDATION_FUND_MANAGER"} />
+        canDownload={me?.can_download ?? false} canGenerate={me?.role === "SYSTEM_ADMIN" || me?.role === "FOUNDATION_FUND_MANAGER"}
+        canDelete={me?.role === "SYSTEM_ADMIN"} />
         : data && <p className="text-sm text-ink-3 px-1">위에서 차입금을 고르세요.</p>}
     </div>
   );

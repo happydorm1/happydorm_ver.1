@@ -24,7 +24,8 @@ def get_version_with_rows(db: Session, loan_id: uuid.UUID, version_no: int) -> R
     v = db.execute(
         select(RepaymentScheduleVersion)
         .options(selectinload(RepaymentScheduleVersion.rows))
-        .where(RepaymentScheduleVersion.loan_id == loan_id, RepaymentScheduleVersion.version_no == version_no)
+        .where(RepaymentScheduleVersion.loan_id == loan_id, RepaymentScheduleVersion.version_no == version_no,
+               RepaymentScheduleVersion.is_deleted.is_(False))
     ).scalar_one_or_none()
     if v is None:
         raise VersionNotFoundError(f"V{version_no} 버전을 찾을 수 없습니다.")

@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.domain.alerts_service import build_alert_summary
 from app.domain.notification_service import scan_notifications
+from app.models.loan import Loan
 from app.models.notification import Notification
 from app.models.organization import User, UserRole
 
@@ -45,7 +46,8 @@ def run_scan(as_of: date | None = None, dormitory_id: uuid.UUID | None = None, d
 @router.get("/notifications", response_model=list[NotificationRead])
 def my_notifications(unread_only: bool = False, limit: int = 50, db: Session = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
-    stmt = select(Notification).where(Notification.recipient_user_id == current_user.id, Notification.is_deleted.is_(False))
+    stmt = (select(Notification).join(Loan, Loan.id == Notification.loan_id)    # 삭제(숨김)된 차입금의 알림은 숨김
+            .where(Notification.recipient_user_id == current_user.id, Notification.is_deleted.is_(False), Loan.is_deleted.is_(False)))
     if unread_only:
         stmt = stmt.where(Notification.is_read.is_(False))
     return db.execute(stmt.order_by(Notification.created_at.desc()).limit(min(max(limit, 1), 200))).scalars().all()

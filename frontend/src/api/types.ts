@@ -249,3 +249,10 @@ export interface ScheduleNote {
   id: string; loan_id: string; due_date: string; note: string; written_on_version_no: number | null;
   created_at: string; created_by_name: string | null; active: boolean;
 }
+
+export interface DeletionRecord {
+  id: Id; target_type: "DORMITORY" | "LOAN" | "SCHEDULE" | "NOTICE"; target_id: Id; label: string; reason: string;
+  detail: Record<string, unknown>; created_at: string; created_by: Id | null; restored_at: string | null; restored_by: Id | null;
+  deleted_by_name: string | null; restored_by_name: string | null;
+}
+export interface AdminDormitory { id: Id; dormitory_name: string; school_name: string; spc_name: string; loan_count: number; created_at: string }

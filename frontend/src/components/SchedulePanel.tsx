@@ -3,16 +3,18 @@ import { api, downloadFile } from "../api/client";
 import type { Compare, ScheduleNote, ScheduleRow, ScheduleVersion, Verification } from "../api/types";
 import { num, pct, won } from "../lib/format";
 import { Badge, Button, Card, Loading, Modal, Notice, fmtDateTime, inputCls, inputSm, useAsync } from "./ui";
+import { DeleteDialog } from "./DeleteDialog";
 
 const ROW_TYPE: Record<string, string> = {
   GRACE: "거치", NORMAL: "", YEAR_END_SPLIT_MEMO: "연도경계(메모)", YEAR_END_SPLIT_REAL: "연도경계", CLOSING: "종결", DEFERRAL_RECOVERY: "유예회수",
 };
 
 /** 원리금 테이블(§19 17개 열) + 버전 선택(§26) + 계산검증 9개 항목(§37) + 버전 비교 + Excel(§30) */
-export function SchedulePanel({ loanId, loanCode, assigned, asOf, canDownload, canGenerate, onGenerated, canNote = canGenerate }: {
+export function SchedulePanel({ loanId, loanCode, assigned, asOf, canDownload, canGenerate, onGenerated, canNote = canGenerate, canDelete = false, onDeleted }: {
   loanId: string; loanCode: string; assigned: number; asOf: string; canDownload: boolean; canGenerate: boolean; onGenerated?: () => void;
-  canNote?: boolean;
+  canNote?: boolean; canDelete?: boolean; onDeleted?: () => void;
 }) {
+  const [delOpen, setDelOpen] = useState(false);
   const { data: versions, error, loading, reload } = useAsync<ScheduleVersion[]>(() => api.versions(loanId), [loanId]);
   const [vno, setVno] = useState<number | null>(null);
   const [view, setView] = useState<"table" | "compare">("table");
@@ -69,6 +71,7 @@ export function SchedulePanel({ loanId, loanCode, assigned, asOf, canDownload, c
               </button>
             ))}
           </div>
+          {canDelete && <Button variant="danger" onClick={() => setDelOpen(true)}>원리금 테이블 삭제</Button>}
           {canDownload && (
             <Button onClick={() => downloadFile(`/loans/${loanId}/schedule/download`, { version_no: String(sel.version_no) },
               `${loanCode}_원리금테이블_v${sel.version_no}.xlsx`).catch((e) => setDlErr(e.message))}>Excel 다운로드</Button>
@@ -76,6 +79,12 @@ export function SchedulePanel({ loanId, loanCode, assigned, asOf, canDownload, c
         </div>
       </div>
       {dlErr && <Notice tone="error" onClose={() => setDlErr(null)}>{dlErr}</Notice>}
+      {delOpen && <DeleteDialog title="원리금 테이블 삭제" target={`${loanCode} 원리금 테이블 (V${versions.map((v) => v.version_no).join(", V")})`}
+        effects={["이 차입금의 모든 버전이 숨겨지고, 차입금은 그대로 남습니다.",
+          "삭제 후 계약조건(거치·상환기간 등)을 고치고 다시 생성할 수 있습니다. 새 테이블 번호는 이어서 매겨집니다.",
+          "적용된 중도변수 이벤트가 있으면 먼저 이벤트를 취소해야 합니다. 납부 기록은 상환일 기준으로 그대로 유지됩니다."]}
+        onClose={() => setDelOpen(false)}
+        onConfirm={async (reason) => { await api.deleteSchedule(loanId, reason); setDelOpen(false); reload(); onDeleted?.(); }} />}
       {view === "table" ? <>
         <VerificationCard loanId={loanId} versionNo={sel.version_no} />
         <ScheduleTable version={sel} assigned={assigned} asOf={asOf} loanId={loanId} canNote={canNote} />

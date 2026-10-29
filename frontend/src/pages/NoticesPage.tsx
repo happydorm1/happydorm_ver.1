@@ -4,7 +4,8 @@ import type { Contact, ContactInput, LoanRow, Me, Notice as NoticeT, NoticeData,
 import { loadLoans } from "../components/LoanPicker";
 import { Badge, Button, Card, Field, Loading, Modal, Notice, PageHeader, Tabs, fmtDateTime, inputCls, useAsync } from "../components/ui";
 import { won } from "../lib/format";
-import { canWrite } from "../lib/perm";
+import { canWrite, isAdmin } from "../lib/perm";
+import { DeleteDialog } from "../components/DeleteDialog";
 import { useRefData } from "../lib/refdata";
 import { go } from "../lib/router";
 
@@ -100,7 +101,7 @@ function Issue({ me, asOf, dormId }: { me: Me | null; asOf: string; dormId?: str
         </Modal>
       )}
       {dormId && <IssuedList key={`${dormId}-${listKey}`} dormId={dormId} dormName={dorm?.dormitory_name ?? ""} canDownload={me?.can_download ?? false}
-        contacts={contacts.data ?? []} />}
+        contacts={contacts.data ?? []} canDelete={isAdmin(me)} onDeleted={(t) => { setMsg(`'${t}' 공문을 삭제했습니다. 관리자 › 삭제·복구에서 되살릴 수 있습니다.`); setListKey((k) => k + 1); }} />}
       {dormId && <Contacts dormId={dormId} dormName={dorm?.dormitory_name ?? ""} writer={writer} onChanged={contacts.reload} />}
     </div>
   );
@@ -169,7 +170,10 @@ function mailtoFor(n: NoticeT, contacts: Contact[]): string | null {
   return `mailto:${to.join(",")}?subject=${encodeURIComponent(n.title)}&body=${encodeURIComponent(body)}`;
 }
 
-function IssuedList({ dormId, dormName, canDownload, contacts }: { dormId: string; dormName: string; canDownload: boolean; contacts: Contact[] }) {
+function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false, onDeleted }: {
+  dormId: string; dormName: string; canDownload: boolean; contacts: Contact[]; canDelete?: boolean; onDeleted?: (title: string) => void;
+}) {
+  const [del, setDel] = useState<NoticeT | null>(null);
   const { data, error } = useAsync<NoticeT[]>(() => api.notices(dormId), [dormId]);
   const [view, setView] = useState<NoticeT | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -189,12 +193,17 @@ function IssuedList({ dormId, dormName, canDownload, contacts }: { dormId: strin
             {canDownload && <>
               {(["xlsx", "pdf"] as const).map((f) => <Button key={f} size="sm" onClick={() => downloadFile(`/notices/${n.id}/download`, { format: f }, `${n.title}.${f}`)
                 .catch((e) => setErr(e.message))}>{f === "xlsx" ? "Excel" : "PDF"}</Button>)}
-            </>}</span>
+            </>}
+            {canDelete && <Button size="sm" variant="danger" onClick={() => setDel(n)}>삭제</Button>}</span>
           </li>))}
         </ul>
       )}
       <p className="mt-2 text-xs text-ink-3">발급본은 발급 당시 값으로 고정됩니다. 이후 원리금 테이블이 바뀌면 새로 발급하세요.
         '메일 작성'은 PC의 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 엽니다 — 내려받은 공문(Excel·PDF)을 첨부해 보내세요.</p>
+      {del && <DeleteDialog title="안내공문 삭제" target={`${del.title} (상환일 ${del.due_date})`}
+        effects={["발급 이력에서 빠지고, SPC 담당자 알림함의 발급 안내도 함께 숨겨집니다.", "원리금 테이블·납부 기록에는 영향이 없습니다."]}
+        onClose={() => setDel(null)}
+        onConfirm={async (reason) => { await api.deleteNotice(del.id, reason); const t = del.title; setDel(null); onDeleted?.(t); }} />}
       {view && <Modal wide title={view.title} onClose={() => setView(null)} footer={<Button onClick={() => setView(null)}>닫기</Button>}>
         <NoticePreview d={view.generated_data} /></Modal>}
     </Card>
