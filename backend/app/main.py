@@ -46,10 +46,6 @@ app.add_middleware(
 app.include_router(api_router)
 
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
 # 금리이력이 회차 기간을 덮지 못하면(예: 적용시작일이 배정일보다 늦음) 500 대신 이유를 알려준다.
 from fastapi.responses import JSONResponse  # noqa: E402
 from app.domain.rate_service import RateNotRegisteredError  # noqa: E402
@@ -57,5 +53,10 @@ from app.domain.rate_service import RateNotRegisteredError  # noqa: E402
 
 @app.exception_handler(RateNotRegisteredError)
 def rate_not_registered_handler(request, exc):
-return JSONResponse(status_code=422, content={"detail": (
-f"{exc} 금리이력 탭에서 적용시작일을 배정일(첫 이자기간 시작일) 이전으로 하는 금리를 등록한 뒤 다시 생성하세요.")})
+    return JSONResponse(status_code=422, content={"detail": (
+        f"{exc} 금리이력 탭에서 적용시작일을 배정일(첫 이자기간 시작일) 이전으로 하는 금리를 등록한 뒤 다시 생성하세요.")})
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
