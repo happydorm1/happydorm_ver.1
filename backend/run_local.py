@@ -27,7 +27,7 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8000"))
     url = f"http://127.0.0.1:{port}"
-    print(f"\n  기숙사 차입금 관리 시스템 실행 중 →  {url}\n  (끄려면 이 창에서 Ctrl+C)\n")
+    print(f"\n  행복기숙사 원리금 시스템 실행 중 →  {url}\n  (끄려면 이 창에서 Ctrl+C)\n")
     if os.environ.get("NO_BROWSER") != "1":
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     uvicorn.run(app, host=host, port=port, log_level="warning")

@@ -7,7 +7,10 @@ KPI 정의(§34)
   실제로 덜 낸 금액은 '미납'으로 따로 보여준다.
 - 금월/익월 상환예정액: 상환예정일이 기준일의 이번 달/다음 달인 예정 원리금 합계
 - 금년 상환예정액·이자예정액: 기준일이 속한 해(1/1~12/31) 전체의 예정 원리금·이자 합계(이미 지난 달 포함) — 화면 표시는 Phase 20에서 뺌(API는 유지)
-- 분기별 상환(예정)액(Phase 20): 기준일이 속한 해 1~12월을 1~4분기로(상환예정일 기준, 원리금 테이블 예정액)
+- 분기별 상환계획액 / 상환액(Phase 20b): 기준일이 속한 해 1~12월을 1~4분기로.
+  계획액 = 원리금 테이블(현재 버전) 예정액, 상환액 = 실제 납부(취소 제외). 둘 다 '상환예정일(회차)'이 속한 분기에 넣어
+  같은 회차끼리 비교한다(1분기 회차를 4월에 늦게 내도 1분기 상환액). 아직 시작하지 않은 분기는 상환액 없음(None).
+  달성률·미상환은 '기준일까지 상환예정일이 지난 회차의 계획액(planned_due_total)' 대비로 본다.
 - 안내공문 발급·수신 현황(Phase 20): notice_status 참고
 - 금리변동 예정건수 / 미납건수: 업무 알림(§35)과 같은 기준(영업일 D-30, 납부기한 경과 미납)
 - (선택) 기간 상환예정액: 검색조건 '기간'이 주어지면 그 구간의 예정 원리금 합계
@@ -29,6 +32,7 @@ from app.domain.version_utils import NoScheduleError, get_current_version, read_
 from app.engine.business_day import effective_due_date
 from app.models.event import LoanEvent, LoanEventStatus
 from app.models.loan import InterestRateHistory
+from app.models.payment import ActualPayment, PaymentStatus
 from app.models.organization import User
 from app.models.reference import Code
 
@@ -66,7 +70,7 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
     next_month = this_month + relativedelta(months=1)
     month_keys = [_month_key(this_month + relativedelta(months=i)) for i in range(MONTHS_AHEAD)]
     monthly = {k: {"principal": 0, "interest": 0} for k in month_keys}
-    quarterly = {q: {"principal": 0, "interest": 0} for q in (1, 2, 3, 4)}
+    quarterly = {q: {"principal": 0, "interest": 0, "due_total": 0} for q in (1, 2, 3, 4)}
     dorm_map = {}
 
     k = defaultdict(int)
@@ -105,6 +109,8 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
                 q = quarterly[(d.month - 1) // 3 + 1]
                 q["principal"] += m["principal"]
                 q["interest"] += m["interest"]
+                if d <= as_of:
+                    q["due_total"] += m["total"]      # 기준일까지 도래한 회차의 계획액(달성률 분모)
             mk = _month_key(d)
             if mk == _month_key(this_month):
                 k["this_month_total"] += m["total"]
@@ -162,10 +168,32 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
         "kpis": kpis,
         "monthly_schedule": [{"month": mk, **monthly[mk], "total": monthly[mk]["principal"] + monthly[mk]["interest"]}
                              for mk in month_keys],
-        "quarterly_schedule": [{"year": as_of.year, "quarter": q, "label": f"{q}분기", "months": f"{3 * q - 2}~{3 * q}월",
-                                **quarterly[q], "total": quarterly[q]["principal"] + quarterly[q]["interest"]} for q in (1, 2, 3, 4)],
+        "quarterly_schedule": _quarters(db, as_of, loan_ids, quarterly),
         "notices": notices,
         "by_fund": sorted(by_fund.values(), key=lambda x: -x["remaining"]),
         "loans": table,
         "alerts": alerts,
     }
+
+
+def _quarters(db: Session, as_of: date, loan_ids: list, plan: dict) -> list[dict]:
+    paid = {q: {"principal": 0, "interest": 0} for q in (1, 2, 3, 4)}
+    if loan_ids:
+        for p in db.execute(select(ActualPayment).where(
+                ActualPayment.loan_id.in_(loan_ids), ActualPayment.status == PaymentStatus.ACTIVE,
+                ActualPayment.is_deleted.is_(False), ActualPayment.due_date >= date(as_of.year, 1, 1),
+                ActualPayment.due_date <= date(as_of.year, 12, 31))).scalars():
+            slot = paid[(p.due_date.month - 1) // 3 + 1]
+            slot["principal"] += p.actual_principal
+            slot["interest"] += p.actual_interest
+    out = []
+    for q in (1, 2, 3, 4):
+        started = date(as_of.year, 3 * q - 2, 1) <= as_of
+        planned = {"principal": plan[q]["principal"], "interest": plan[q]["interest"],
+                   "total": plan[q]["principal"] + plan[q]["interest"]}
+        actual = {**paid[q], "total": paid[q]["principal"] + paid[q]["interest"]} if started else None
+        out.append({"year": as_of.year, "quarter": q, "label": f"{q}분기", "months": f"{3 * q - 2}~{3 * q}월",
+                    **planned,                      # 이전 화면 호환: principal/interest/total = 계획액
+                    "planned": planned, "paid": actual, "started": started,
+                    "planned_due_total": plan[q]["due_total"]})   # 기준일까지 상환예정일이 지난 회차의 계획액
+    return out

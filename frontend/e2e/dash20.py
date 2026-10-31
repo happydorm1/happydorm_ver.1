@@ -46,11 +46,14 @@ with sync_playwright() as p:
     login(page, "demo-admin@example.com")
     expect(page.get_by_role("navigation", name="주 메뉴").locator("..")).to_contain_text("행복기숙사 원리금 시스템")
     assert page.title() == "행복기숙사 원리금 시스템"
-    chart = page.locator("section[aria-label^='분기별 상환(예정)액']")
-    expect(chart).to_contain_text("2026년 1~12월")
+    chart = page.locator("section[aria-label^='분기별 원리금 상환 현황']")
+    expect(chart).to_contain_text("(계획·실적, 2026년)")
     chart.get_by_role("button", name="표로 보기").click()
-    expect(chart.locator("tbody tr")).to_have_count(4)
-    expect(chart).to_contain_text("4분기")
+    expect(chart.locator("tbody tr")).to_have_count(5)                       # 1~4분기 + 합계
+    q3 = chart.locator("tbody tr", has_text="3분기")
+    expect(q3).to_contain_text("230,336,520원")                                # 3분기 미상환 = 데모 미납 2건
+    expect(chart.locator("tbody tr", has_text="1분기")).to_contain_text("100%")
+    expect(chart.locator("tbody tr", has_text="4분기").locator("td").last).to_have_text("-")   # 도래 회차 없음
     kpis = page.locator("section[aria-label='주요 지표']")
     expect(kpis).to_contain_text("안내공문 미수신0건")
     expect(page.locator(UP)).to_contain_text("미발급")
@@ -142,5 +145,5 @@ with sync_playwright() as p:
     expect(dlg).to_be_hidden()
     b.close()
 
-print("E2E OK: 시스템명, 분기별 차트(4분기), 공문 발급 → 발송예정 발급완료·미수신 + 미수신 KPI, 다른 SPC에는 안 보임, "
+print("E2E OK: 시스템명, 분기별 원리금 상환 현황(계획·실적, 미상환·달성률), 공문 발급 → 발송예정 발급완료·미수신 + 미수신 KPI, 다른 SPC에는 안 보임, "
       "해당 SPC 담당자 내려받기 → 수신 확인 → 재단 미수신 0·발송예정 '수신', 더보기 팝업(패널 높이 유지)")

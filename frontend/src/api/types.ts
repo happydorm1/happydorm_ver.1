@@ -18,7 +18,12 @@ export interface Kpis {
 }
 
 export interface MonthPoint { month: string; principal: number; interest: number; total: number }
-export interface QuarterPoint { year: number; quarter: number; label: string; months: string; principal: number; interest: number; total: number }
+export interface Amounts { principal: number; interest: number; total: number }
+export interface QuarterPoint {
+  year: number; quarter: number; label: string; months: string; principal: number; interest: number; total: number;
+  planned: Amounts; paid: Amounts | null; started: boolean;   // paid: 아직 시작 안 한 분기는 null
+  planned_due_total: number;                                   // 기준일까지 상환예정일이 지난 회차의 계획액
+}
 export interface FundSlice { fund: string; loan_count: number; assigned: number; remaining: number }
 
 export interface LoanRow {

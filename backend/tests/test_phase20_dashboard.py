@@ -104,3 +104,24 @@ def test_other_roles_see_no_notice_lists_and_spc_sees_only_own():
     assert fund["notices"]["scope"] == "FOUNDATION"
     s = client.get("/api/v1/dashboard", params={"as_of": "2023-05-20"}, headers=spc_manager_headers(h, spc_a)).json()
     assert {i["dormitory_id"] for i in s["notices"]["received"]["items"]} == {dorm_a}
+
+
+def test_quarterly_planned_vs_paid_by_due_date_quarter():
+    h = admin_headers()
+    loan_id, dorm, _ = make_loan(h)     # 분기 회차: 2·5·8·11월 말
+    summ = client.get(f"/api/v1/loans/{loan_id}/payments/summary", params={"as_of": "2024-06-15"}, headers=h).json()
+    feb = next(r for r in summ["rows"] if r["due_date"] == "2024-02-29")      # 같은 날 행이 여럿일 수 있어 회차 합계로
+    pay = lambda due, paid, pr, it: client.post(f"/api/v1/loans/{loan_id}/payments", headers=h, json={  # noqa: E731
+        "due_date": due, "actual_paid_date": paid, "actual_principal": pr, "actual_interest": it})
+    assert pay("2024-02-29", "2024-04-02", feb["scheduled_principal"], feb["scheduled_interest"]).status_code in (200, 201)  # 늦게 냄
+    assert pay("2024-05-31", "2024-05-31", 1_000_000, 0).status_code in (200, 201)                                      # 일부
+    q = _dash(h, "2024-06-15", dorm)["quarterly_schedule"]
+    assert q[0]["paid"]["total"] == feb["scheduled_total"]   # 4월에 냈어도 1분기 회차
+    assert q[0]["paid"]["total"] == q[0]["planned"]["total"]
+    assert q[1]["paid"] == {"principal": 1_000_000, "interest": 0, "total": 1_000_000}
+    assert q[1]["planned"]["total"] > q[1]["paid"]["total"]
+    assert q[2]["paid"] is None and q[3]["paid"] is None and q[2]["started"] is False   # 아직 시작 안 한 분기
+    assert q[0]["total"] == q[0]["planned"]["total"]                                     # 호환 필드
+    assert q[1]["planned_due_total"] == q[1]["planned"]["total"]                          # 5/31 회차 도래
+    q2 = _dash(h, "2024-05-15", dorm)["quarterly_schedule"]
+    assert q2[1]["planned_due_total"] == 0 and q2[1]["planned"]["total"] > 0              # 2분기 회차 아직 안 옴
