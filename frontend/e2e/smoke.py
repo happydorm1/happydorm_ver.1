@@ -87,15 +87,21 @@ with sync_playwright() as p:
     kpis = page.locator("section[aria-label='주요 지표']")
     expect(kpis).to_contain_text("8곳")
     expect(kpis).to_contain_text("698억원")
-    for title in ("상환 예정", "금리변동 예정", "미납", "확인 필요"):
+    expect(kpis).not_to_contain_text("금년 상환예정")
+    expect(kpis).to_contain_text("안내공문 미수신")
+    for title in ("안내공문 발송예정(상환예정)", "안내공문 미수신", "금리변동 예정", "미납", "확인 필요"):
         expect(page.locator(f"section[aria-label='{title}']")).to_be_visible()
     expect(page.locator("section[aria-label='미납']")).to_contain_text("2건")
-    expect(page.locator("section[aria-label='상환 예정']")).to_contain_text("상환일 2026-10-31 휴일")   # 휴일 → 다음 영업일
+    expect(page.locator("section[aria-label='안내공문 발송예정(상환예정)']")).to_contain_text("상환일 2026-10-31 휴일")   # 휴일 → 다음 영업일
 
-    page.select_option("section[aria-label='검색조건'] select >> nth=1", label="주택도시기금")
+    page.select_option("form[aria-label='검색조건'] select >> nth=1", label="주택도시기금")
+    expect(page.get_by_text("조건을 바꿨습니다")).to_be_visible()                # 조회 전에는 그대로
+    wait_count(page, 9)
+    page.get_by_role("button", name="조회", exact=True).click()
     wait_count(page, 4)
     page.get_by_role("button", name=re.compile("상세 조건")).click()
     page.locator("label:has-text('중도변수 여부') select").select_option("true")
+    page.get_by_role("button", name="조회", exact=True).click()
     wait_count(page, 1)                                                      # 주택 + 중도변수 = 다온생활관(가속상환)
     expect(page.locator("section[aria-label='차입금 현황'] tbody")).to_contain_text("다온생활관")
     page.get_by_role("button", name="초기화").click()
@@ -104,7 +110,9 @@ with sync_playwright() as p:
     # 기간 KPI는 시작·종료를 모두 넣어야 나타난다
     page.fill("input[aria-label='기간 시작']", "2026-11-01")
     expect(page.get_by_text("기간은 시작일과 종료일을 모두")).to_be_visible()
+    expect(page.get_by_role("button", name="조회", exact=True)).to_be_disabled()
     page.fill("input[aria-label='기간 종료']", "2026-12-31")
+    page.get_by_role("button", name="조회", exact=True).click()
     expect(kpis).to_contain_text("기간 상환예정")
 
     # 표: 검색·정렬
@@ -141,11 +149,16 @@ with sync_playwright() as p:
     wait_count(spc, 2)                                                     # 가람관 차입금 2건
     expect(spc.locator("section[aria-label='차입금 현황'] tbody")).to_contain_text("가람관")
     expect(spc.locator("section[aria-label='주요 지표']")).to_contain_text("1곳")
+    expect(spc.locator("section[aria-label='안내공문 수신']")).to_be_visible()
+    expect(spc.locator("section[aria-label='안내공문 발송예정(상환예정)']")).to_have_count(0)
+    expect(spc.locator("section[aria-label='주요 지표']")).not_to_contain_text("안내공문 미수신")
 
     # 3) 조회자: 다운로드 제한 → CSV 버튼 없음, 팝업 없음
     viewer = browser.new_page(viewport={"width": 1280, "height": 900})
     login(viewer, "demo-viewer@example.com", expect_popup=False)
     expect(viewer.get_by_role("button", name=re.compile("CSV"))).to_have_count(0)
+    expect(viewer.locator("section[aria-label='금리변동 예정']")).to_be_visible()
+    expect(viewer.locator("section[aria-label='안내공문 발송예정(상환예정)']")).to_have_count(0)
     expect(viewer.locator("section[aria-label='Excel 자료 내려받기']")).to_have_count(0)
     expect(viewer.locator("header").first).to_contain_text("조회자")
 

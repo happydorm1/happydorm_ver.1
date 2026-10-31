@@ -7,7 +7,7 @@ import { FilterBar } from "../components/FilterBar";
 import { FundBreakdown } from "../components/FundBreakdown";
 import { KpiGrid } from "../components/KpiGrid";
 import { LoanTable } from "../components/LoanTable";
-import { MonthlyChart } from "../components/MonthlyChart";
+import { ScheduleChart } from "../components/MonthlyChart";
 import { ReportDownload } from "../components/ReportDownload";
 
 /** 기간은 시작·종료가 모두 있을 때만 보낸다(하나만 보내면 서버가 거부) */
@@ -37,7 +37,7 @@ export function DashboardPage({ asOf, canDownload }: { asOf: string; canDownload
         .then((d) => { if (my === seq.current) { setData(d); setError(null); } })
         .catch((e) => { if (my === seq.current) setError(e instanceof Error ? e.message : "불러오지 못했습니다."); })
         .finally(() => { if (my === seq.current) setLoading(false); });
-    }, 200); // 조건을 연달아 바꿀 때 요청이 몰리지 않도록
+    }, 50);
     return () => clearTimeout(t);
   }, [asOf, query, reloadKey]);
 
@@ -67,9 +67,12 @@ export function DashboardPage({ asOf, canDownload }: { asOf: string; canDownload
             {loading && <span role="status">· 갱신 중…</span>}
           </div>
           <KpiGrid k={data.kpis} period={data.period} />
-          <AlertPanels a={data.alerts} />
+          <AlertPanels a={data.alerts} notices={data.notices} canDownload={canDownload} onChanged={() => setReloadKey((k) => k + 1)} />
           <div className="grid gap-4 grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <MonthlyChart data={data.monthly_schedule} />
+            <ScheduleChart title={`분기별 상환(예정)액 (${data.quarterly_schedule[0]?.year ?? ""}년 1~12월)`} unitLabel="분기" maxBar={64}
+              emptyText="올해 상환(예정)액이 없습니다."
+              data={data.quarterly_schedule.map((q) => ({ key: `${q.year}-Q${q.quarter}`, label: q.label, sub: q.months,
+                principal: q.principal, interest: q.interest, total: q.total }))} />
             <FundBreakdown data={data.by_fund} />
           </div>
           <LoanTable rows={data.loans} asOf={data.as_of} canDownload={canDownload} />

@@ -183,7 +183,11 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
       {!data ? <Loading /> : data.length === 0 ? <p className="text-sm text-ink-3">발급한 공문이 없습니다.</p> : (
         <ul className="divide-y divide-line">{data.map((n) => (
           <li key={n.id} className="py-2 flex flex-wrap items-center gap-2 text-sm">
-            <button type="button" className="font-medium hover:underline text-left" onClick={() => setView(n)}>{n.title}</button>
+            <button type="button" className="font-medium hover:underline text-left"
+              onClick={() => { setView(n); api.notice(n.id).catch(() => undefined); }}>{n.title}</button>
+            {n.received_at
+              ? <span className="rounded border border-good px-1.5 text-[11px]" title={`${RECEIVED_VIA[n.received_via ?? ""] ?? ""} ${fmtDateTime(n.received_at)}`}>수신 확인</span>
+              : <span className="rounded border border-warning px-1.5 text-[11px] text-warning-ink">미수신</span>}
             <span className="text-xs text-ink-2 tabular">상환일 {n.due_date} · 납부기한 {n.payment_deadline} · 합계 {won(n.generated_data.totals.total)} · 발급 {fmtDateTime(n.created_at)}</span>
             <span className="ml-auto flex gap-2">
             {(() => { const href = mailtoFor(n, contacts); return href
@@ -209,6 +213,8 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
     </Card>
   );
 }
+
+const RECEIVED_VIA: Record<string, string> = { VIEW: "열람", DOWNLOAD: "내려받기", NOTIFICATION: "알림 확인" };
 
 function Templates() {
   const { data, error, reload } = useAsync<Template[]>(() => api.templates(), []);

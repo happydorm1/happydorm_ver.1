@@ -1,14 +1,15 @@
 import type { Kpis } from "../api/types";
 import { compactWon, num, won } from "../lib/format";
 
-function Tile({ label, value, full, sub, tone }: {
-  label: string; value: string; full?: string; sub?: string; tone?: "critical" | "warning";
-}) {
-  const toneCls = tone === "critical" ? "border-l-4 border-l-critical" : tone === "warning" ? "border-l-4 border-l-warning" : "";
+type Tone = "critical" | "warning" | "serious";
+const BORDER: Record<Tone, string> = { critical: "border-l-4 border-l-critical", warning: "border-l-4 border-l-warning", serious: "border-l-4 border-l-serious" };
+const DOT: Record<Tone, string> = { critical: "text-critical-ink", warning: "text-warning", serious: "text-serious" };
+
+function Tile({ label, value, full, sub, tone }: { label: string; value: string; full?: string; sub?: string; tone?: Tone }) {
   return (
-    <div className={`bg-surface border border-line rounded-xl px-4 py-3 ${toneCls}`} title={full}>
+    <div className={`bg-surface border border-line rounded-xl px-4 py-3 ${tone ? BORDER[tone] : ""}`} title={full}>
       <div className="text-xs text-ink-2 flex items-center gap-1">
-        {tone && <span aria-hidden className={tone === "critical" ? "text-critical-ink" : "text-warning-ink"}>●</span>}
+        {tone && <span aria-hidden className={DOT[tone]}>●</span>}
         {label}
       </div>
       <div className="text-2xl font-bold mt-1 tabular leading-tight">{value}</div>
@@ -27,12 +28,12 @@ export function KpiGrid({ k, period }: { k: Kpis; period: { from: string; to: st
         sub={`차입금의 ${remainingRatio}% · 계획 기준`} />
       <Tile label="금월 상환예정" value={`${compactWon(k.this_month_scheduled)}원`} full={won(k.this_month_scheduled)} sub="원금+이자" />
       <Tile label="익월 상환예정" value={`${compactWon(k.next_month_scheduled)}원`} full={won(k.next_month_scheduled)} sub="원금+이자" />
-      <Tile label="금년 상환예정" value={`${compactWon(k.this_year_scheduled)}원`} full={won(k.this_year_scheduled)}
-        sub="원금+이자 · 연간" />
-      <Tile label="금년 이자예정" value={`${compactWon(k.this_year_interest)}원`} full={won(k.this_year_interest)}
-        sub={k.this_year_scheduled ? `금년 상환예정의 ${Math.round((k.this_year_interest / k.this_year_scheduled) * 100)}%` : undefined} />
+      {k.notice_unreceived_count !== undefined && (
+        <Tile label="안내공문 미수신" value={`${num(k.notice_unreceived_count)}건`} sub="발급 후 기숙사 측 미확인"
+          tone="warning" />
+      )}
       <Tile label="금리변동 예정" value={`${num(k.rate_change_upcoming_count)}건`} sub="영업일 D-30 이내"
-        tone={k.rate_change_upcoming_count ? "warning" : undefined} />
+        tone={k.rate_change_upcoming_count ? "serious" : undefined} />
       <Tile label="미납" value={`${num(k.overdue_count)}건`} full={won(k.overdue_amount)}
         sub={k.overdue_count ? `미납액 ${compactWon(k.overdue_amount)}원` : "납부기한 경과 기준"}
         tone={k.overdue_count ? "critical" : undefined} />

@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
 from app.domain.alerts_service import build_alert_summary
+from app.domain.notice_status import ensure_uuid, mark_received
 from app.domain.notification_service import scan_notifications
+from app.models.document import GeneratedDocument
 from app.models.loan import Loan
 from app.models.notification import Notification
 from app.models.organization import User, UserRole
@@ -62,6 +64,12 @@ def mark_read(notification_id: uuid.UUID, db: Session = Depends(get_db), current
         n.is_read, n.read_at = True, datetime.now(timezone.utc)
         db.commit()
         db.refresh(n)
+    if n.notification_type == "NOTICE_ISSUED":            # 공문 발급 알림을 읽으면 그 공문은 수신
+        nid = ensure_uuid((n.payload or {}).get("notice_id"))
+        doc = db.get(GeneratedDocument, nid) if nid else None
+        if doc is not None:
+            mark_received(db, doc, current_user, "NOTIFICATION")
+            db.refresh(n)
     return n
 
 

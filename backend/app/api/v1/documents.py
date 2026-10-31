@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.security import ensure_can_download, get_current_user, require_roles
 from app.domain.notice_service import NoticeError, build_notice_data, get_active_template, issue_notice
 from app.engine.notice_export import PdfUnavailableError, build_notice_workbook, convert_xlsx_to_pdf
+from app.domain.notice_status import mark_received
 from app.models.document import DocumentTemplate, GeneratedDocument
 from app.models.organization import Dormitory, User, UserRole
 
@@ -62,6 +63,8 @@ class NoticeRead(BaseModel):
     created_by: uuid.UUID | None
     generated_data: dict
     notified_users: int = 0                    # 발급 직후 응답에만: 시스템 알림을 받은 SPC 담당자 수
+    received_at: datetime | None = None        # 기숙사(SPC 담당자) 수신 시각 — 열람·내려받기·알림 읽음
+    received_via: str | None = None
 
 
 def _template_out(t: DocumentTemplate) -> TemplateRead:
@@ -76,7 +79,8 @@ def _notice_out(doc: GeneratedDocument) -> NoticeRead:
     data = dict(doc.generated_data)
     data["account"] = reveal_account(data.get("account"))
     return NoticeRead(id=doc.id, dormitory_id=doc.dormitory_id, due_date=doc.due_date, payment_deadline=doc.payment_deadline,
-                      title=doc.title, created_at=doc.created_at, created_by=doc.created_by, generated_data=data)
+                      title=doc.title, created_at=doc.created_at, created_by=doc.created_by, generated_data=data,
+                      received_at=doc.received_at, received_via=doc.received_via)
 
 
 def _dormitory(db: Session, dormitory_id: uuid.UUID, user: User) -> Dormitory:
@@ -173,7 +177,9 @@ def _get_notice(db: Session, notice_id: uuid.UUID, user: User) -> GeneratedDocum
 
 @router.get("/notices/{notice_id}", response_model=NoticeRead)
 def get_notice(notice_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return _notice_out(_get_notice(db, notice_id, current_user))
+    doc = _get_notice(db, notice_id, current_user)
+    mark_received(db, doc, current_user, "VIEW")            # 기숙사 측(SPC 담당자)이 열람하면 수신
+    return _notice_out(doc)
 
 
 @router.get("/notices/{notice_id}/download")
@@ -186,6 +192,7 @@ def download_notice(notice_id: uuid.UUID, format: str = "xlsx", db: Session = De
     if fmt not in ("xlsx", "pdf"):
         raise HTTPException(status_code=422, detail="format은 xlsx 또는 pdf여야 합니다.")
     content = build_notice_workbook(_notice_out(doc).generated_data)
+    mark_received(db, doc, current_user, "DOWNLOAD")        # 기숙사 측(SPC 담당자)이 내려받으면 수신
     media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     if fmt == "pdf":
         try:

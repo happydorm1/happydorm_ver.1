@@ -14,9 +14,11 @@ export interface Kpis {
   overdue_count: number;
   overdue_amount: number;
   period_scheduled?: number;
+  notice_unreceived_count?: number;   // 관리자·자금담당자에게만
 }
 
 export interface MonthPoint { month: string; principal: number; interest: number; total: number }
+export interface QuarterPoint { year: number; quarter: number; label: string; months: string; principal: number; interest: number; total: number }
 export interface FundSlice { fund: string; loan_count: number; assigned: number; remaining: number }
 
 export interface LoanRow {
@@ -33,6 +35,7 @@ interface LoanRef { loan_id: Id; loan_code: string; dormitory_name: string; fund
 export interface UpcomingItem extends LoanRef {
   due_date: string; payment_deadline: string; threshold: string; threshold_n: number; alert_date: string;
   principal: number; interest: number; total: number; outstanding: number;
+  dormitory_id?: Id; notice_issued?: boolean; notice_received?: boolean; notice_id?: Id | null;
 }
 export interface RateChangeItem extends LoanRef {
   current_rate: number; change_date: string; new_rate: number | null; days_left: number; business_days_left: number;
@@ -78,6 +81,8 @@ export interface Dashboard {
   period: { from: string; to: string } | null;
   kpis: Kpis;
   monthly_schedule: MonthPoint[];
+  quarterly_schedule: QuarterPoint[];
+  notices: NoticeStatus;
   by_fund: FundSlice[];
   loans: LoanRow[];
   alerts: Alerts;
@@ -203,6 +208,7 @@ export interface NoticeData {
 export interface Notice {
   id: Id; dormitory_id: Id; due_date: string; payment_deadline: string; title: string; created_at: string;
   created_by: Id | null; generated_data: NoticeData; notified_users?: number;
+  received_at?: string | null; received_via?: "VIEW" | "DOWNLOAD" | "NOTIFICATION" | null;
 }
 export interface Contact {
   id: Id; dormitory_id: Id; name: string; organization: string | null; position: string | null; email: string | null;
@@ -269,3 +275,14 @@ export interface MigrationBatch {
   dormitory_ids: Id[]; created_at: string; created_by: Id | null; created_by_name: string | null;
   cancelled_at: string | null; cancel_reason: string | null;
 }
+
+// ---------- Phase 20: 안내공문 발급·수신 현황 ----------
+export interface NoticeStatusItem {
+  notice_id: Id; dormitory_id: Id; dormitory_name: string; school_name: string; title: string; due_date: string;
+  payment_deadline: string; issued_at: string; total: number | null; received: boolean; received_at: string | null;
+  received_by_name: string | null; received_via: "VIEW" | "DOWNLOAD" | "NOTIFICATION" | null;
+}
+export type NoticeStatus =
+  | { scope: "FOUNDATION"; unreceived: { count: number; items: NoticeStatusItem[] } }
+  | { scope: "SPC"; received: { count: number; unconfirmed: number; items: NoticeStatusItem[] } }
+  | { scope: "NONE" };

@@ -19,7 +19,7 @@ export function LoginPage({ onDone, notice }: { onDone: () => void; notice?: str
   return (
     <div className="min-h-full grid place-items-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm bg-surface border border-line rounded-xl p-6 shadow-sm">
-        <div className="text-lg font-bold">기숙사 차입금 관리</div>
+        <div className="text-lg font-bold">행복기숙사 원리금 시스템</div>
         <p className="text-sm text-ink-2 mt-1 mb-5">업무 계정으로 로그인하세요.</p>
         <label className="block text-sm mb-3">
           <span className="text-ink-2">이메일</span>

@@ -55,7 +55,7 @@ export function Layout({ children, onLogout, asOf, onAsOf, me, onPasswordChanged
     <div className="min-h-full lg:grid lg:grid-cols-[232px_1fr]">
       <aside className={`bg-brand text-brand-ink lg:block ${menuOpen ? "block" : "hidden"} lg:min-h-screen`}>
         <div className="px-5 py-5 border-b border-white/10">
-          <div className="text-[15px] font-bold leading-tight">기숙사 차입금 관리</div>
+          <div className="text-[15px] font-bold leading-tight">행복기숙사 원리금 시스템</div>
           <div className="text-xs opacity-70 mt-1">원리금 산출 · 상환관리</div>
         </div>
         <nav className="px-3 py-3" aria-label="주 메뉴">

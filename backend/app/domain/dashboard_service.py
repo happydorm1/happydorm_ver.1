@@ -6,7 +6,9 @@ KPI 정의(§34)
 - 총 잔여원금: 배정금액 − 기준일까지 '예정된' 원금상환액(현재 버전, 유예 회수원금 포함). 실제 납부 여부와 무관한 계획 기준.
   실제로 덜 낸 금액은 '미납'으로 따로 보여준다.
 - 금월/익월 상환예정액: 상환예정일이 기준일의 이번 달/다음 달인 예정 원리금 합계
-- 금년 상환예정액·이자예정액: 기준일이 속한 해(1/1~12/31) 전체의 예정 원리금·이자 합계(이미 지난 달 포함)
+- 금년 상환예정액·이자예정액: 기준일이 속한 해(1/1~12/31) 전체의 예정 원리금·이자 합계(이미 지난 달 포함) — 화면 표시는 Phase 20에서 뺌(API는 유지)
+- 분기별 상환(예정)액(Phase 20): 기준일이 속한 해 1~12월을 1~4분기로(상환예정일 기준, 원리금 테이블 예정액)
+- 안내공문 발급·수신 현황(Phase 20): notice_status 참고
 - 금리변동 예정건수 / 미납건수: 업무 알림(§35)과 같은 기준(영업일 D-30, 납부기한 경과 미납)
 - (선택) 기간 상환예정액: 검색조건 '기간'이 주어지면 그 구간의 예정 원리금 합계
 """
@@ -19,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.alerts_service import build_alert_summary
 from app.domain.calendar_service import load_holidays
+from app.domain.notice_status import build_notice_status
 from app.domain.loan_filters import MIDTERM_EVENT_TYPES, LoanFilters, filtered_loans
 from app.domain.rate_service import rate_history, rate_on
 from app.domain.schedule_amounts import scheduled_by_due_date
@@ -63,6 +66,8 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
     next_month = this_month + relativedelta(months=1)
     month_keys = [_month_key(this_month + relativedelta(months=i)) for i in range(MONTHS_AHEAD)]
     monthly = {k: {"principal": 0, "interest": 0} for k in month_keys}
+    quarterly = {q: {"principal": 0, "interest": 0} for q in (1, 2, 3, 4)}
+    dorm_map = {}
 
     k = defaultdict(int)
     by_fund: dict[str, dict] = {}
@@ -71,6 +76,7 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
 
     for loan, dorm, fund in rows:
         dormitories.add(dorm.id)
+        dorm_map[dorm.id] = dorm
         k["loan_count"] += 1
         k["total_assigned"] += loan.assigned_amount
         fslot = by_fund.setdefault(fund.fund_name, {"fund": fund.fund_name, "loan_count": 0, "assigned": 0, "remaining": 0})
@@ -96,6 +102,9 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
             if d.year == as_of.year:
                 k["year_total"] += m["total"]
                 k["year_interest"] += m["interest"]
+                q = quarterly[(d.month - 1) // 3 + 1]
+                q["principal"] += m["principal"]
+                q["interest"] += m["interest"]
             mk = _month_key(d)
             if mk == _month_key(this_month):
                 k["this_month_total"] += m["total"]
@@ -128,6 +137,7 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
         })
 
     alerts = build_alert_summary(db, user, as_of, filters=f)
+    notices = build_notice_status(db, user, as_of, dorm_map, alerts["repayment_upcoming"]["items"])
     kpis = {
         "dormitory_count": len(dormitories),
         "loan_count": k["loan_count"],
@@ -141,6 +151,8 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
         "overdue_count": alerts["overdue"]["count"],
         "overdue_amount": alerts["overdue"]["amount"],
     }
+    if notices["scope"] == "FOUNDATION":
+        kpis["notice_unreceived_count"] = notices["unreceived"]["count"]
     if f.period_from and f.period_to:
         kpis["period_scheduled"] = k["period_total"]
 
@@ -150,6 +162,9 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
         "kpis": kpis,
         "monthly_schedule": [{"month": mk, **monthly[mk], "total": monthly[mk]["principal"] + monthly[mk]["interest"]}
                              for mk in month_keys],
+        "quarterly_schedule": [{"year": as_of.year, "quarter": q, "label": f"{q}분기", "months": f"{3 * q - 2}~{3 * q}월",
+                                **quarterly[q], "total": quarterly[q]["principal"] + quarterly[q]["interest"]} for q in (1, 2, 3, 4)],
+        "notices": notices,
         "by_fund": sorted(by_fund.values(), key=lambda x: -x["remaining"]),
         "loans": table,
         "alerts": alerts,

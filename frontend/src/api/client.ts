@@ -127,6 +127,7 @@ export const api = {
   deactivateTemplate: (id: string) => request<Template>(`/document-templates/${id}/deactivate`, undefined, {}),
   adminDormitories: () => request<AdminDormitory[]>("/admin/dormitories"),
   deletions: (includeRestored = false) => request<DeletionRecord[]>("/admin/deletions", includeRestored ? { include_restored: "true" } : undefined),
+  notice: (id: string) => request<Notice>(`/notices/${id}`),   // SPC 담당자가 열면 '수신'으로 기록
   migrationBatches: () => request<MigrationBatch[]>("/admin/migration/batches"),
   cancelMigration: (id: string, reason: string) => request<{ loans: number; dormitories: number }>(`/admin/migration/batches/${id}/cancel`, undefined, { reason }),
   restoreDeletion: (id: string) => request<DeletionRecord>(`/admin/deletions/${id}/restore`, undefined, {}),

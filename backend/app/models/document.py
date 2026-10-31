@@ -1,8 +1,8 @@
 """안내공문(§28~29) — 양식 기준정보와 발급 이력(스냅샷)."""
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,3 +37,7 @@ class GeneratedDocument(Base, AuditMixin):
     payment_deadline: Mapped[date] = mapped_column(Date, nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     generated_data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    # 기숙사(SPC 담당자) 수신: 담당자가 공문을 열람·내려받거나 공문 알림을 읽으면 처음 한 번 기록(재단 대시보드 '미수신' 판단)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    received_via: Mapped[str | None] = mapped_column(String(20), nullable=True)   # VIEW / DOWNLOAD / NOTIFICATION

@@ -49,7 +49,8 @@ def _build(db: Session, rows, as_of: date) -> dict:
     due_years: set[int] = set()
 
     for loan, dorm, fund in rows:
-        base = {"loan_id": loan.id, "loan_code": loan.loan_code, "dormitory_name": dorm.dormitory_name, "fund": fund.fund_name}
+        base = {"loan_id": loan.id, "loan_code": loan.loan_code, "dormitory_id": dorm.id, "dormitory_name": dorm.dormitory_name,
+                "fund": fund.fund_name}
         hist = rate_history(db, loan.id)
         if not any(h.effective_start_date <= loan.assigned_date for h in hist):
             rate_missing.append({**base, "issue": "배정일 기준 적용 가능한 금리 이력이 없습니다."})
