@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.core.security import ensure_can_download, get_current_user, require_roles
 from app.domain.notice_service import NoticeError, build_notice_data, get_active_template, issue_notice
 from app.engine.notice_export import PdfUnavailableError, build_notice_workbook, convert_xlsx_to_pdf
-from app.domain.notice_status import mark_received
+from app.domain.notice_status import mark_received, notice_targets, notices_issued
 from app.models.document import DocumentTemplate, GeneratedDocument
 from app.models.organization import Dormitory, User, UserRole
 
@@ -175,6 +175,27 @@ def _get_notice(db: Session, notice_id: uuid.UUID, user: User) -> GeneratedDocum
     return doc
 
 
+# ---------- Phase 21: 원리금 상환 › 안내공문 ----------
+@router.get("/notices/targets")
+def list_notice_targets(as_of: date | None = None, date_from: date | None = None, date_to: date | None = None,
+                        include_issued: bool = False, dormitory_id: uuid.UUID | None = None, db: Session = Depends(get_db),
+                        current_user: User = Depends(require_roles(*FOUNDATION_ROLES))):
+    """발송대상 현황 — 기본은 납부기한 영업일 D-15 이내 회차 중 공문 미발급(기숙사·상환예정일 단위)."""
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="기간 시작일이 종료일보다 늦습니다.")
+    return notice_targets(db, current_user, as_of or date.today(), date_from=date_from, date_to=date_to,
+                          include_issued=include_issued, dormitory_id=dormitory_id)
+
+
+@router.get("/notices/issued")
+def list_notices_issued(date_from: date | None = None, date_to: date | None = None, received: bool | None = None,
+                        dormitory_id: uuid.UUID | None = None, db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_user)):
+    """발송완료 — 기숙사·상환예정일별 최근 발급본과 수신 확인 여부(SPC 담당자는 자기 기숙사만)."""
+    return notices_issued(db, current_user, date_from=date_from, date_to=date_to, received=received, dormitory_id=dormitory_id)
+
+
+
 @router.get("/notices/{notice_id}", response_model=NoticeRead)
 def get_notice(notice_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     doc = _get_notice(db, notice_id, current_user)
@@ -203,3 +224,5 @@ def download_notice(notice_id: uuid.UUID, format: str = "xlsx", db: Session = De
     filename = quote(f"{doc.title}.{fmt}")
     return Response(content=content, media_type=media,
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"})
+
+

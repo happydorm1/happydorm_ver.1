@@ -59,7 +59,7 @@ with sync_playwright() as p:
     expect(page.locator(UP)).to_contain_text("미발급")
 
     # 미르기숙사 상환일(2026-10-31) 공문 발급
-    nav(page, "안내공문")
+    page.evaluate("location.hash = \'#/notices\'")
     sel = page.get_by_label("기숙사", exact=True)
     sel.select_option(sel.locator("option", has_text="미르기숙사").first.get_attribute("value"))
     page.locator("section", has_text="1. 기숙사·상환예정일").get_by_role("button", name="2026-10-31").click()
@@ -84,7 +84,7 @@ with sync_playwright() as p:
     spc.close()
 
     # 미르기숙사 SPC 담당자를 만들어 확인(관리자 › 사용자·권한)
-    nav(page, "사용자·권한")
+    nav(page, "사용자·권한설정")
     page.get_by_role("button", name="사용자 등록").click()
     d = page.get_by_role("dialog")
     d.get_by_label("이름").fill("미르담당")

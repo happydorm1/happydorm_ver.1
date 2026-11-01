@@ -42,7 +42,7 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
         title={<span>{dorm?.dormitory_name ?? "…"} <span className="text-ink-2 font-normal">· {loan.loan_code}</span></span>}
         sub={<span className="flex flex-wrap items-center gap-2">{dorm?.school_name} · {fund?.fund_name} · {RATE_TYPE[loan.rate_type]}
           · 배정 {won(loan.assigned_amount)} <Badge tone={st.tone}>{st.label}</Badge></span>}
-        actions={isAdmin(me) && <Button size="sm" variant="danger" onClick={() => setDelOpen(true)}>차입금 삭제</Button>} />
+        actions={writable && <Button size="sm" variant="danger" onClick={() => setDelOpen(true)}>차입금 삭제</Button>} />
       {delOpen && <DeleteDialog title="차입금 삭제" target={`${dorm?.dormitory_name ?? ""} · ${loan.loan_code}`}
         effects={["이 차입금과 원리금 테이블·납부·알림이 모든 화면·대시보드·Excel·공문 작성에서 빠집니다.",
           "삭제 중에는 같은 차입금 코드로 새로 등록할 수 있습니다."]}

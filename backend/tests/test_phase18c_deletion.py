@@ -27,8 +27,8 @@ def test_delete_loan_reuse_code_and_restore_conflict():
     loan_id, dorm, _ = make_loan(h)
     code = client.get(f"/api/v1/loans/{loan_id}", headers=h).json()["loan_code"]
 
-    # 관리자만, 사유 필수
-    assert client.post(f"/api/v1/admin/delete/loans/{loan_id}", json={"reason": "x"}, headers=_fund_headers(h)).status_code == 403
+    # 사유 필수 · 기숙사 삭제는 관리자만(Phase 21부터 차입금 삭제는 자금담당자도 가능 — test_phase21_menu 참고)
+    assert client.post(f"/api/v1/admin/delete/dormitories/{dorm}", json={"reason": "x"}, headers=_fund_headers(h)).status_code == 403
     assert client.post(f"/api/v1/admin/delete/loans/{loan_id}", json={"reason": ""}, headers=h).status_code == 422
 
     rec = client.post(f"/api/v1/admin/delete/loans/{loan_id}", json={"reason": "테스트 데이터"}, headers=h)

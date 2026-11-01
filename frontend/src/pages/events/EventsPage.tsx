@@ -37,7 +37,7 @@ export function EventsPage({ me, asOf, tab, loanId }: { me: Me | null; asOf: str
   if (!canSeeHistory(me)) return <Notice tone="error">이벤트 관리 권한이 없습니다.</Notice>;
   return (
     <div className="space-y-4">
-      <PageHeader title="이벤트 관리" sub="금리변동·상환유예·조기상환·원금가속상환·대환대출을 등록하면 원리금 테이블 새 버전이 만들어집니다(지난 버전 보존)." />
+      <PageHeader title="이벤트 등록" sub="금리변동·상환유예·조기상환·원금가속상환·대환대출을 등록하면 원리금 테이블 새 버전이 만들어집니다(지난 버전 보존)." />
       <Tabs label="이벤트 관리" value={cur} onChange={(t) => go("events", { tab: t, loan: loanId })} tabs={tabs} />
       {cur === "new" && <NewEvent me={me} asOf={asOf} loanId={loanId} />}
       {cur === "list" && <EventList me={me} />}

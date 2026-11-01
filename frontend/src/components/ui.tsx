@@ -115,8 +115,8 @@ export function Tabs<T extends string>({ tabs, value, onChange, label }: {
   );
 }
 
-export function Modal({ title, onClose, children, footer, wide }: {
-  title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
+export function Modal({ title, onClose, children, footer, wide, xl }: {
+  title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; xl?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -128,7 +128,7 @@ export function Modal({ title, onClose, children, footer, wide }: {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="presentation" onMouseDown={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}
-        className={`w-full ${wide ? "max-w-3xl" : "max-w-lg"} max-h-[90vh] flex flex-col bg-surface text-ink border border-line rounded-xl shadow-2xl`}>
+        className={`w-full ${xl ? "max-w-7xl" : wide ? "max-w-3xl" : "max-w-lg"} max-h-[90vh] flex flex-col bg-surface text-ink border border-line rounded-xl shadow-2xl`}>
         <header className="px-5 py-3 border-b border-line font-semibold">{title}</header>
         <div className="px-5 py-4 overflow-y-auto">{children}</div>
         {footer && <footer className="flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-line">{footer}</footer>}

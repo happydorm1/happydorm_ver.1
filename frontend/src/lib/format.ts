@@ -18,3 +18,13 @@ export const today = () => {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
+
+/** 기간을 연 단위로(18개월 → 1.5년). 소수 둘째 자리까지, 끝의 0은 뺀다 */
+export const yearsLabel = (months: number | null | undefined) =>
+  months == null ? "-" : `${String(Math.round((months / 12) * 100) / 100)}년`;
+/** 두 날짜 사이 개월 수(일수 ÷ 30.4375 반올림) — 거치기간 표시용 */
+export const monthsBetween = (from?: string | null, to?: string | null) => {
+  if (!from || !to) return null;
+  const days = (new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000;
+  return days > 0 ? Math.round(days / 30.4375) : 0;
+};

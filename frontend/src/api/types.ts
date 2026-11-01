@@ -34,6 +34,9 @@ export interface LoanRow {
   next_due_date: string | null; next_payment_deadline: string | null; next_due_total: number | null;
   schedule_version_no: number | null; schedule_status: "NORMAL" | "NEEDS_REVIEW" | "NO_SCHEDULE";
   has_midterm_event: boolean; has_rate_change: boolean;
+  // Phase 21: 차입금 관리 목록
+  project_type?: string | null; grace_start_date?: string | null; grace_end_date?: string | null;
+  principal_repay_start_date?: string; repay_period_months?: number; maturity_date?: string | null;
 }
 
 interface LoanRef { loan_id: Id; loan_code: string; dormitory_name: string; fund: string }
@@ -209,6 +212,7 @@ export interface NoticeData {
   payments: { label: string; balance_before: number; rate: number; principal: number; interest: number; total: number; ipmt: boolean }[];
   totals: { balance_before: number; principal: number; interest: number; total: number };
   notes: string[]; warnings: string[]; sources: { loan_id: Id; loan_code: string; schedule_version_no: number }[];
+  account_source?: "TEMPLATE" | "DORMITORY" | "OVERRIDE";
 }
 export interface Notice {
   id: Id; dormitory_id: Id; due_date: string; payment_deadline: string; title: string; created_at: string;
@@ -291,3 +295,13 @@ export type NoticeStatus =
   | { scope: "FOUNDATION"; unreceived: { count: number; items: NoticeStatusItem[] } }
   | { scope: "SPC"; received: { count: number; unconfirmed: number; items: NoticeStatusItem[] } }
   | { scope: "NONE" };
+
+// ---------- Phase 21: 기숙사 입금계좌 · 안내공문 발송대상/발송완료 ----------
+export interface DormAccount { dormitory_id: Id; bank_account: string | null; account_holder: string | null; uses_common: boolean }
+export interface NoticeTarget {
+  dormitory_id: Id; dormitory_name: string; school_name: string; project_type: string | null; due_date: string;
+  payment_deadline: string; business_days_left: number | null; loans: string[]; funds: string[];
+  principal: number; interest: number; total: number; notice_id: Id | null; issued: boolean; issued_at: string | null; received: boolean;
+}
+export interface NoticeTargets { as_of: string; default_window: boolean; days: number; count: number; items: NoticeTarget[] }
+export interface NoticesIssued { count: number; unreceived: number; items: NoticeStatusItem[] }

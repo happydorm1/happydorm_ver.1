@@ -8,20 +8,32 @@ const ROLE_LABEL: Record<Role, string> = {
 };
 
 // 메뉴 구성은 3단계 설계서(메뉴·화면 설계)를 따른다. 아직 화면이 없는 메뉴는 '예정'으로 표시하고 누를 수 없다.
-type Who = "all" | "foundation" | "writer" | "admin";
-export const MENU: { group: string; items: { label: string; route?: string; who?: Who }[] }[] = [
+type Who = "all" | "foundation" | "writer" | "admin" | "staff";
+type Item = { label: string; route?: string; who?: Who; heading?: boolean; indent?: boolean };
+/** Phase 21 메뉴 구성(2차 요청서). heading = 하위 묶음 제목(누르지 않음), indent = 그 아래 항목 */
+export const MENU: { group: string; items: Item[] }[] = [
   { group: "", items: [{ label: "대시보드", route: "dashboard" }] },
-  { group: "차입금", items: [{ label: "차입금 관리", route: "loans" }, { label: "원리금 테이블", route: "schedule" },
-    { label: "이벤트 관리", route: "events", who: "foundation" }] },
-  { group: "상환", items: [{ label: "실제 상환관리", route: "payments" }, { label: "안내공문", route: "notices" }, { label: "알림", route: "notifications" }] },
-  { group: "관리자", items: [{ label: "기준정보", route: "admin/reference", who: "writer" }, { label: "사용자·권한", route: "admin/users", who: "admin" },
-    { label: "감사로그", route: "admin/audit", who: "admin" }, { label: "기존 차입금 이관", route: "admin/migration", who: "admin" }, { label: "삭제·복구", route: "admin/deletions", who: "admin" }] },
+  { group: "차입금 마스터", items: [
+    { label: "차입금 등록", heading: true, who: "writer" },
+    { label: "신규등록", route: "loans/new", who: "writer", indent: true },
+    { label: "기존 차입금 이관", route: "admin/migration", who: "admin", indent: true },
+    { label: "이벤트 등록", route: "events", who: "foundation" },
+    { label: "차입금 관리", route: "loans" }] },
+  { group: "원리금 상환", items: [
+    { label: "안내공문", heading: true, who: "staff" },
+    { label: "발송대상 현황", route: "notices/targets", who: "writer", indent: true },
+    { label: "발송완료", route: "notices/issued", who: "staff", indent: true },
+    { label: "상환 실적 관리", route: "payments", who: "staff" }] },
+  { group: "마이페이지", items: [{ label: "알림", route: "notifications" }, { label: "기준정보", route: "admin/reference", who: "writer" }] },
+  { group: "관리자", items: [{ label: "사용자·권한설정", route: "admin/users", who: "admin" },
+    { label: "감사로그", route: "admin/audit", who: "admin" }, { label: "삭제·복구", route: "admin/deletions", who: "admin" }] },
 ];
 function allowed(who: Who | undefined, role?: Role) {
   if (!who || who === "all") return true;
   if (!role) return false;
   if (who === "admin") return role === "SYSTEM_ADMIN";
   if (who === "writer") return role === "SYSTEM_ADMIN" || role === "FOUNDATION_FUND_MANAGER";
+  if (who === "staff") return role !== "SPC_MANAGER";   // 재단 직원(관리자·자금담당·결재권자·조회자)
   return role !== "SPC_MANAGER" && role !== "VIEWER";
 }
 
@@ -62,12 +74,14 @@ export function Layout({ children, onLogout, asOf, onAsOf, me, onPasswordChanged
           {MENU.map((g) => ({ ...g, items: g.items.filter((it) => allowed(it.who, me?.role)) })).filter((g) => g.items.length).map((g) => (
             <div key={g.group || "home"} className="mb-3">
               {g.group && <div className="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wide opacity-60">{g.group}</div>}
-              {g.items.map((it) => it.route ? (
+              {g.items.map((it) => it.heading ? (
+                <div key={it.label} className="px-2 pt-1.5 pb-0.5 text-[12px] opacity-75">{it.label}</div>
+              ) : it.route ? (
                 <a key={it.label} href={`#/${it.route}`} onClick={() => setMenuOpen(false)}
                   aria-current={section === it.route ? "page" : undefined}
-                  className={`w-full flex items-center rounded-md px-2 py-2 text-sm hover:bg-white/10
+                  className={`w-full flex items-center rounded-md ${it.indent ? "pl-5 pr-2" : "px-2"} py-2 text-sm hover:bg-white/10
                     ${section === it.route ? "bg-white/15 font-semibold" : ""}`}>
-                  {it.label}
+                  {it.indent && <span aria-hidden className="mr-1.5 opacity-50">·</span>}{it.label}
                 </a>
               ) : (
                 <span key={it.label} aria-disabled="true"

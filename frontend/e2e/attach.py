@@ -100,7 +100,7 @@ with sync_playwright() as p:
     shot(page, "a03_schedule_note")
 
     # 3) 이벤트 등록 직후 증빙 첨부 → 이벤트 이력의 '증빙'에서 확인 → 차입금 증빙 탭에 '이벤트'로 함께 보임
-    nav(page, "이벤트 관리")
+    nav(page, "이벤트 등록")
     pick(page.get_by_label("차입금 선택"), "온새누리관")
     page.get_by_role("radiogroup", name="이벤트 종류").get_by_text("조기상환").click()
     page.get_by_label("접수일(적용일)").fill("2025-01-15")
@@ -128,7 +128,7 @@ with sync_playwright() as p:
     d.locator("footer").get_by_role("button", name="닫기").click()
 
     # 4) 납부 입금증
-    nav(page, "실제 상환관리")
+    nav(page, "상환 실적 관리")
     card = page.locator("section", has_text="납부기한이 지난 미납")
     card.locator("tr", has_text="바름학사").get_by_role("link", name="납부 입력 →").click()
     page.locator("tr", has_text="미납").filter(has=page.get_by_role("button", name="납부 입력")).first.get_by_role("button", name="납부 입력").click()

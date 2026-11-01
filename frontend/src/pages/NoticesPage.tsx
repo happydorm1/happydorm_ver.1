@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, downloadFile } from "../api/client";
-import type { Contact, ContactInput, LoanRow, Me, Notice as NoticeT, NoticeData, Template } from "../api/types";
+import type { Contact, ContactInput, DormAccount, LoanRow, Me, Notice as NoticeT, NoticeData, Template } from "../api/types";
 import { loadLoans } from "../components/LoanPicker";
 import { Badge, Button, Card, Field, Loading, Modal, Notice, PageHeader, Tabs, fmtDateTime, inputCls, useAsync } from "../components/ui";
 import { won } from "../lib/format";
@@ -12,22 +12,23 @@ import { go } from "../lib/router";
 type Tab = "issue" | "templates";
 
 /** 안내공문(§28~29) — 기숙사·상환일만 고르면 원리금 테이블 값이 자동으로 채워진 공문 미리보기 → 발급(스냅샷) → Excel/PDF */
-export function NoticesPage({ me, asOf, tab, dormId }: { me: Me | null; asOf: string; tab: Tab; dormId?: string }) {
+export function NoticesPage({ me, asOf, tab, dormId, due }: { me: Me | null; asOf: string; tab: Tab; dormId?: string; due?: string }) {
   const writer = canWrite(me);
-  const tabs = [{ value: "issue" as Tab, label: "공문 발급·이력" }, ...(writer ? [{ value: "templates" as Tab, label: "공문 양식(입금계좌)" }] : [])];
+  const tabs = [{ value: "issue" as Tab, label: "공문 작성·발급·이력" }, ...(writer ? [{ value: "templates" as Tab, label: "공문 양식(공통 계좌)" }] : [])];
   return (
     <div className="space-y-4">
-      <PageHeader title="안내공문" sub="기숙사와 상환예정일을 고르면 원리금 테이블 값으로 공문이 자동 작성됩니다. 발급하면 그 시점 내용이 그대로 보존됩니다." />
+      <PageHeader title="공문 작성·발급" back={{ href: "#/notices/targets", label: "발송대상 현황" }}
+        sub="기숙사와 상환예정일을 고르면 원리금 테이블 값으로 공문이 자동 작성됩니다. 발급하면 그 시점 내용이 그대로 보존되고 '발송완료'로 넘어갑니다." />
       <Tabs label="안내공문" value={tabs.some((t) => t.value === tab) ? tab : "issue"} onChange={(t) => go("notices", { tab: t, dormitory: dormId })} tabs={tabs} />
-      {tab === "templates" && writer ? <Templates /> : <Issue me={me} asOf={asOf} dormId={dormId} />}
+      {tab === "templates" && writer ? <Templates /> : <Issue key={`${dormId}-${due}`} me={me} asOf={asOf} dormId={dormId} initialDue={due} />}
     </div>
   );
 }
 
-function Issue({ me, asOf, dormId }: { me: Me | null; asOf: string; dormId?: string }) {
+function Issue({ me, asOf, dormId, initialDue }: { me: Me | null; asOf: string; dormId?: string; initialDue?: string }) {
   const ref = useRefData();
   const loans = useAsync<LoanRow[]>(() => loadLoans(asOf), [asOf]);
-  const [due, setDue] = useState("");
+  const [due, setDue] = useState(initialDue ?? "");
   const [deadline, setDeadline] = useState("");
   const [preview, setPreview] = useState<NoticeData | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -41,6 +42,8 @@ function Issue({ me, asOf, dormId }: { me: Me | null; asOf: string; dormId?: str
   // 그 기숙사 차입금의 다음 상환일들(대시보드 계산값) — 상환일 고르기 도움
   const suggestions = useMemo(() => [...new Set((loans.data ?? []).filter((l) => l.dormitory_id === dormId && l.next_due_date)
     .map((l) => l.next_due_date as string))].sort(), [loans.data, dormId]);
+
+  useEffect(() => { if (dormId && initialDue) load(initialDue); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   async function load(d = due) {
     if (!dormId || !d) return;
@@ -103,6 +106,7 @@ function Issue({ me, asOf, dormId }: { me: Me | null; asOf: string; dormId?: str
       {dormId && <IssuedList key={`${dormId}-${listKey}`} dormId={dormId} dormName={dorm?.dormitory_name ?? ""} canDownload={me?.can_download ?? false}
         contacts={contacts.data ?? []} canDelete={isAdmin(me)} onDeleted={(t) => { setMsg(`'${t}' 공문을 삭제했습니다. 관리자 › 삭제·복구에서 되살릴 수 있습니다.`); setListKey((k) => k + 1); }} />}
       {dormId && <Contacts dormId={dormId} dormName={dorm?.dormitory_name ?? ""} writer={writer} onChanged={contacts.reload} />}
+      {dormId && <AccountCard dormId={dormId} dormName={dorm?.dormitory_name ?? ""} writer={writer} onChanged={() => { if (preview) load(); }} />}
     </div>
   );
 }
@@ -118,7 +122,8 @@ export function NoticePreview({ d, actions }: { d: NoticeData; actions?: React.R
         <div className="text-center">
           <div className="text-lg font-bold">{d.title}</div>
           <div className="text-sm text-ink-2 mt-1">납부기한 <b className="tabular">{d.payment_deadline}</b>
-            {d.payment_deadline_adjusted && <Badge tone="warning">휴일 → 다음 영업일</Badge>} · 입금계좌 {d.account.bank_account} ({d.account.account_holder})</div>
+            {d.payment_deadline_adjusted && <Badge tone="warning">휴일 → 다음 영업일</Badge>} · 입금계좌 {d.account.bank_account} ({d.account.account_holder})
+            {d.account_source && <span className="ml-1 text-xs text-ink-3">[{d.account_source === "DORMITORY" ? "기숙사 계좌" : d.account_source === "OVERRIDE" ? "직접 지정" : "공통 계좌"}]</span>}</div>
         </div>
         {d.warnings.length > 0 && <Notice tone="info">{d.warnings.map((w) => <span key={w} className="block">⚠ {w}</span>)}</Notice>}
         <div className="overflow-x-auto">
@@ -236,7 +241,8 @@ function Templates() {
             </li>))}
           </ul>
         ))}
-        <p className="mt-2 text-xs text-ink-3">계좌번호는 암호화해 저장하며 목록에는 끝 4자리만 보입니다. 공문 발급에는 가장 최근 사용 양식을 씁니다.</p>
+        <p className="mt-2 text-xs text-ink-3">계좌번호는 암호화해 저장하며 목록에는 끝 4자리만 보입니다. 여기 계좌는 <b>기숙사별 입금계좌를 등록하지 않은 기숙사</b>의 공문에 쓰는 공통 계좌입니다.
+          기숙사별 계좌는 공문 작성·발급 화면의 '입금계좌'에서 등록합니다.</p>
       </Card>
       <Card title="새 양식(입금계좌) 등록">
         <div className="grid gap-3 sm:grid-cols-3">
@@ -338,6 +344,48 @@ function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dor
           {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
         </Modal>
       )}
+    </Card>
+  );
+}
+
+/** Phase 21: 기숙사별 입금계좌 — 수신처·연락처 아래. 비우면 공문 양식의 공통 계좌를 쓴다. */
+function AccountCard({ dormId, dormName, writer, onChanged }: { dormId: string; dormName: string; writer: boolean; onChanged: () => void }) {
+  const { data, error, reload } = useAsync<DormAccount>(() => api.dormAccount(dormId), [dormId]);
+  const [edit, setEdit] = useState<{ bank_account: string; account_holder: string } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function save(body: { bank_account: string; account_holder: string }) {
+    setBusy(true); setErr(null);
+    try { await api.saveDormAccount(dormId, body); setEdit(null); reload(); onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "저장하지 못했습니다."); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Card title={`입금계좌 — ${dormName}`} actions={writer && data && !edit &&
+      <Button size="sm" onClick={() => setEdit({ bank_account: data.bank_account ?? "", account_holder: data.account_holder ?? "" })}>
+        {data.uses_common ? "기숙사 계좌 등록" : "변경"}</Button>}>
+      {error && <Notice tone="error">{error}</Notice>}
+      {data && !edit && (data.uses_common
+        ? <p className="text-sm text-ink-2" aria-label="입금계좌 상태">기숙사별 계좌가 없어 <b>공통 계좌</b>(공문 양식)로 공문이 작성됩니다.</p>
+        : <p className="text-sm" aria-label="입금계좌 상태"><b className="tabular">{data.bank_account}</b> · 예금주 {data.account_holder}
+            <Badge tone="good">이 기숙사 공문에 사용</Badge></p>)}
+      {edit && (
+        <div className="grid gap-3 sm:grid-cols-[2fr_1fr_auto] items-end">
+          <Field label="계좌번호(은행명 포함)"><input className={inputCls} aria-label="계좌번호" value={edit.bank_account}
+            placeholder="예) 가나은행 123-456-789012" onChange={(e) => setEdit({ ...edit, bank_account: e.target.value })} /></Field>
+          <Field label="예금주"><input className={inputCls} aria-label="예금주" value={edit.account_holder}
+            onChange={(e) => setEdit({ ...edit, account_holder: e.target.value })} /></Field>
+          <div className="flex gap-2 pb-0.5">
+            <Button onClick={() => setEdit(null)}>취소</Button>
+            <Button variant="primary" disabled={busy || !edit.bank_account.trim() || !edit.account_holder.trim()} onClick={() => save(edit)}>저장</Button>
+          </div>
+        </div>
+      )}
+      {writer && data && !data.uses_common && !edit &&
+        <button type="button" className="mt-2 text-xs underline text-ink-2" onClick={() => save({ bank_account: "", account_holder: "" })}>
+          기숙사 계좌 지우고 공통 계좌 쓰기</button>}
+      {err && <div className="mt-2"><Notice tone="error" onClose={() => setErr(null)}>{err}</Notice></div>}
+      <p className="mt-2 text-xs text-ink-3">계좌번호는 암호화해 저장합니다. 이미 발급한 공문은 발급 당시 계좌 그대로이며, 바꾼 계좌는 다음 발급부터 들어갑니다.</p>
     </Card>
   );
 }

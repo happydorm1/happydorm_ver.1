@@ -60,12 +60,12 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     page = b.new_page(viewport={"width": 1400, "height": 900})
 
-    # 0) 자금담당: 삭제 버튼·메뉴가 없다
+    # 0) 자금담당: 삭제·복구 메뉴와 원리금 테이블 삭제는 없고, 차입금 삭제만 가능
     login(page, "demo-fund@example.com")
     expect(page.locator("section[aria-label='주요 지표']")).to_contain_text("8곳")
     expect(page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="삭제·복구")).to_have_count(0)
     open_loan(page, "미르기숙사")
-    expect(page.get_by_role("button", name="차입금 삭제")).to_have_count(0)
+    expect(page.get_by_role("button", name="차입금 삭제")).to_have_count(1)                # Phase 21: 자금담당자도 차입금 삭제 가능
     page.get_by_role("tab", name="원리금 테이블").click()
     expect(page.get_by_role("button", name="원리금 테이블 삭제")).to_have_count(0)
 
@@ -102,7 +102,7 @@ with sync_playwright() as p:
     expect(kpi_dorms(page)).to_contain_text("6곳")
 
     # 4) 안내공문 발급 → 삭제
-    nav(page, "안내공문")
+    page.evaluate("location.hash = \'#/notices\'")
     sel = page.get_by_label("기숙사", exact=True)
     sel.select_option(sel.locator("option", has_text="가람관").first.get_attribute("value"))
     page.locator("section", has_text="1. 기숙사·상환예정일").get_by_role("button", name=re.compile(r"^\d{4}-\d{2}-\d{2}$")).first.click()
@@ -127,7 +127,7 @@ with sync_playwright() as p:
     expect(page.get_by_text("적용된 이벤트가 없습니다")).to_be_visible()
 
     # 4c) 이벤트 건별 삭제(이벤트 관리 › 이벤트 이력, 새봄관)
-    nav(page, "이벤트 관리")
+    nav(page, "이벤트 등록")
     page.get_by_role("tab", name="이벤트 이력").click()
     row = page.locator("table tbody tr", has_text="새봄관").first
     row.get_by_role("button", name=re.compile("삭제$")).click()
@@ -155,7 +155,7 @@ with sync_playwright() as p:
     open_loan(page, "라온하우스")
     page.get_by_role("tab", name="원리금 테이블").click()
     expect(page.get_by_label("원리금 테이블 버전")).to_contain_text("V2")
-    nav(page, "이벤트 관리")
+    nav(page, "이벤트 등록")
     page.get_by_role("tab", name="이벤트 이력").click()
     expect(page.locator("table tbody")).to_contain_text("새봄관")
 

@@ -15,6 +15,7 @@ from app.models.organization import DeletionRecord, Dormitory, SPC, User, UserRo
 
 router = APIRouter(prefix="/admin", tags=["관리자 삭제·복구"])
 ADMIN = require_roles(UserRole.SYSTEM_ADMIN)
+LOAN_DELETERS = require_roles(UserRole.SYSTEM_ADMIN, UserRole.FOUNDATION_FUND_MANAGER)
 
 
 class ReasonIn(BaseModel):
@@ -63,7 +64,8 @@ def delete_dormitory(dormitory_id: uuid.UUID, body: ReasonIn, db: Session = Depe
 
 
 @router.post("/delete/loans/{loan_id}", response_model=DeletionRead)
-def delete_loan(loan_id: uuid.UUID, body: ReasonIn, db: Session = Depends(get_db), user: User = Depends(ADMIN)):
+def delete_loan(loan_id: uuid.UUID, body: ReasonIn, db: Session = Depends(get_db), user: User = Depends(LOAN_DELETERS)):
+    """Phase 21: 차입금 삭제(숨김)는 재단 자금담당자도 가능(사유 필수·기록). 복구는 관리자만."""
     return _run(db, svc.delete_loan, loan_id, body.reason, user)
 
 

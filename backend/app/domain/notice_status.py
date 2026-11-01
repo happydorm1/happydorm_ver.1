@@ -83,3 +83,79 @@ def ensure_uuid(v) -> uuid.UUID | None:
         return uuid.UUID(str(v)) if v else None
     except ValueError:
         return None
+
+
+# ---------- Phase 21: 원리금 상환 › 안내공문 — 발송대상 현황 / 발송완료 ----------
+TARGET_DAYS = 15   # 기본 발송대상: 납부기한이 영업일 D-15 이내(대시보드 '발송예정'과 같은 기준)
+
+
+def notice_targets(db: Session, user: User, as_of: date, *, date_from: date | None = None, date_to: date | None = None,
+                   include_issued: bool = False, dormitory_id: uuid.UUID | None = None) -> dict:
+    """기숙사·상환예정일 단위 발송대상. 기간을 주지 않으면 납부기한 영업일 D-15 이내(오늘~), 주면 상환예정일이 그 기간인 회차."""
+    from app.domain.calendar_service import load_holidays
+    from app.domain.loan_filters import LoanFilters, filtered_loans
+    from app.domain.schedule_amounts import scheduled_by_due_date
+    from app.domain.version_utils import NoScheduleError, get_current_version, read_cache
+    from app.engine.business_day import count_business_days, effective_due_date
+
+    holidays = load_holidays(db)
+    rows = filtered_loans(db, user, LoanFilters(dormitory_id=dormitory_id).active_only())
+    slots: dict[tuple, dict] = {}
+    with read_cache(db, [loan.id for loan, _, _ in rows]):
+        for loan, dorm, fund in rows:
+            try:
+                amounts = scheduled_by_due_date(db, get_current_version(db, loan.id))
+            except NoScheduleError:
+                continue
+            for d, m in amounts.items():
+                if m["total"] <= 0:
+                    continue
+                deadline = effective_due_date(d, holidays)
+                if date_from or date_to:
+                    if (date_from and d < date_from) or (date_to and d > date_to):
+                        continue
+                elif not (deadline >= as_of and count_business_days(as_of, deadline, holidays) <= TARGET_DAYS):
+                    continue
+                s = slots.setdefault((dorm.id, d), {
+                    "dormitory_id": dorm.id, "dormitory_name": dorm.dormitory_name, "school_name": dorm.school_name,
+                    "project_type": dorm.project_type, "due_date": d, "payment_deadline": deadline,
+                    "business_days_left": count_business_days(as_of, deadline, holidays) if deadline >= as_of else None,
+                    "loans": [], "funds": set(), "principal": 0, "interest": 0, "total": 0})
+                s["loans"].append(loan.loan_code)
+                s["funds"].add(fund.fund_name)
+                for k in ("principal", "interest", "total"):
+                    s[k] += m[k]
+    docs = _latest_docs(db, {k[0] for k in slots})
+    out = []
+    for k, s in slots.items():
+        doc = docs.get(k)
+        s["funds"] = sorted(s["funds"])
+        s.update(notice_id=doc.id if doc else None, issued=doc is not None, issued_at=doc.created_at if doc else None,
+                 received=bool(doc and doc.received_at))
+        if doc is None or include_issued:
+            out.append(s)
+    out.sort(key=lambda x: (x["payment_deadline"], x["dormitory_name"]))
+    return {"as_of": as_of, "default_window": not (date_from or date_to), "days": TARGET_DAYS, "count": len(out), "items": out}
+
+
+def notices_issued(db: Session, user: User, *, date_from: date | None = None, date_to: date | None = None,
+                   received: bool | None = None, dormitory_id: uuid.UUID | None = None) -> dict:
+    """발송완료: 기숙사·상환예정일별 가장 최근 발급본(상환예정일 기준 기간), 수신 확인 여부 포함."""
+    q = select(Dormitory).where(Dormitory.is_deleted.is_(False))
+    if user.role == UserRole.SPC_MANAGER:
+        q = q.where(Dormitory.spc_id == user.spc_id)
+    if dormitory_id:
+        q = q.where(Dormitory.id == dormitory_id)
+    dorms = {d.id: d for d in db.execute(q).scalars()}
+    docs = _latest_docs(db, set(dorms))
+    uids = {d.received_by for d in docs.values() if d.received_by}
+    names = {u.id: u.name for u in db.execute(select(User).where(User.id.in_(uids))).scalars()} if uids else {}
+    items = []
+    for (did, due), doc in docs.items():
+        if (date_from and due < date_from) or (date_to and due > date_to):
+            continue
+        if received is not None and (doc.received_at is not None) != received:
+            continue
+        items.append(_item(doc, dorms[did], names))
+    items.sort(key=lambda i: (-i["due_date"].toordinal(), i["dormitory_name"]))
+    return {"count": len(items), "unreceived": sum(1 for i in items if not i["received"]), "items": items}

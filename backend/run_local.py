@@ -21,7 +21,16 @@ from app.main import app  # noqa: E402
 WEB = Path(os.environ.get("WEB_DIR", HERE.parent / "web")).resolve()
 if not (WEB / "index.html").exists():
     sys.exit(f"[오류] 화면 파일이 없습니다: {WEB}\\index.html  (frontend 폴더에서 npm run build 후 dist를 web으로 복사)")
-app.mount("/", StaticFiles(directory=WEB, html=True), name="web")   # API 경로(/api, /docs, /health)가 먼저 처리된다
+class WebFiles(StaticFiles):
+    """index.html은 매번 새로 확인하게 한다 — 업데이트 후 브라우저가 옛 화면을 붙잡고 있지 않도록(assets는 파일명이 바뀌므로 캐시 그대로)."""
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        if path in ("", ".", "index.html") or path.endswith(".html"):
+            resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+app.mount("/", WebFiles(directory=WEB, html=True), name="web")   # API 경로(/api, /docs, /health)가 먼저 처리된다
 
 if __name__ == "__main__":
     host = os.environ.get("HOST", "127.0.0.1")

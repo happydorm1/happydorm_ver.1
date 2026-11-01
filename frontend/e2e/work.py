@@ -49,7 +49,7 @@ with sync_playwright() as p:
     login(page, "demo-fund@example.com")
 
     # 1) 이벤트: 원리금균등 차입금은 금리변동 불가 안내 → 일부 조기상환 적용(V2) → 이력에서 취소(V3)
-    nav(page, "이벤트 관리")
+    nav(page, "이벤트 등록")
     pick(page.get_by_label("차입금 선택"), "온새누리관")
     page.get_by_role("radiogroup", name="이벤트 종류").get_by_text("금리변동").click()
     expect(page.get_by_text("원금균등(단리) 차입금만 지원")).to_be_visible()
@@ -71,7 +71,7 @@ with sync_playwright() as p:
     shot(page, "w02_event_list")
 
     # 2) 실제 상환: 미납 현황(차입금별) → 바름학사 납부 입력 → 완납 → 취소
-    nav(page, "실제 상환관리")
+    nav(page, "상환 실적 관리")
     card = page.locator("section", has_text="납부기한이 지난 미납")
     expect(card).to_contain_text("바름학사")
     expect(card).to_contain_text("누리학사")
@@ -91,7 +91,7 @@ with sync_playwright() as p:
     expect(pays.locator("tr", has_text="E2E 취소")).to_contain_text("취소")
 
     # 3) 안내공문: 가람관 → 다음 상환일 버튼 → 미리보기 → 발급 → 이력·Excel
-    nav(page, "안내공문")
+    page.evaluate("location.hash = \'#/notices\'")
     pick(page.get_by_label("기숙사", exact=True), "가람관")
     page.locator("section", has_text="1. 기숙사·상환예정일").get_by_role("button", name=re.compile(r"^\d{4}-\d{2}-\d{2}$")).first.click()
     prev = page.locator("section[aria-label='2. 공문 미리보기']")
@@ -146,7 +146,7 @@ with sync_playwright() as p:
     a.get_by_label("이름").fill(f"E2E 휴일 {RUN}")
     a.get_by_role("button", name="직접 추가").click()
     expect(a.get_by_text(f"E2E 휴일 {RUN}")).to_be_visible()
-    nav(a, "사용자·권한")
+    nav(a, "사용자·권한설정")
     a.get_by_role("button", name="사용자 등록").click()
     d = a.get_by_role("dialog")
     d.get_by_label("이름").fill(f"검증사용자{RUN}")
@@ -170,14 +170,14 @@ with sync_playwright() as p:
     # 6) 역할별 메뉴: 결재권자 — 이벤트 관리(결재함)만, 등록 없음 / SPC 담당자 — 관리자·이벤트 메뉴 없음
     ap = b.new_page(viewport={"width": 1280, "height": 900})
     login(ap, "demo-approver@example.com")
-    nav(ap, "이벤트 관리")
+    nav(ap, "이벤트 등록")
     expect(ap.get_by_role("tab", name="결재함")).to_be_visible()
     expect(ap.get_by_role("tab", name="이벤트 등록")).to_have_count(0)
     sp = b.new_page(viewport={"width": 1280, "height": 900})
     login(sp, "demo-spc@example.com")
     menu = sp.get_by_role("navigation", name="주 메뉴")
-    expect(menu.get_by_role("link", name="이벤트 관리")).to_have_count(0)
-    expect(menu.get_by_role("link", name="사용자·권한")).to_have_count(0)
+    expect(menu.get_by_role("link", name="이벤트 등록")).to_have_count(0)
+    expect(menu.get_by_role("link", name="사용자·권한설정")).to_have_count(0)
 
     # 7) 휴대폰 폭
     m = b.new_page(viewport={"width": 390, "height": 844})

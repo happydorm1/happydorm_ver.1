@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
+from app.core.crypto import decrypt_str, encrypt_str, mask_account
 from app.domain.audit import record_audit
 from app.models.organization import Dormitory, DormitoryContact, User, UserRole
 
@@ -131,3 +132,37 @@ def deactivate_contact(contact_id: uuid.UUID, payload: DeactivateIn, db: Session
         db.commit()
         db.refresh(c)
     return c
+
+
+
+# ---------- Phase 21: 기숙사별 입금계좌 ----------
+class AccountIn(BaseModel):
+    bank_account: str | None = Field(default=None, max_length=120)   # 비우면 공통 계좌(공문 양식) 사용
+    account_holder: str | None = Field(default=None, max_length=100)
+
+
+@router.get("/dormitories/{dormitory_id}/account")
+def get_account(dormitory_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    d = _dormitory(db, dormitory_id, user)
+    full = user.role in WRITE_ROLES
+    acc = (decrypt_str(d.bank_account) if full else mask_account(d.bank_account)) if d.bank_account else None
+    return {"dormitory_id": d.id, "bank_account": acc, "account_holder": d.account_holder,
+            "uses_common": not (d.bank_account and d.account_holder)}
+
+
+@router.put("/dormitories/{dormitory_id}/account")
+def put_account(dormitory_id: uuid.UUID, body: AccountIn, db: Session = Depends(get_db),
+                user: User = Depends(require_roles(*WRITE_ROLES))):
+    d = _dormitory(db, dormitory_id, user)
+    acc = (body.bank_account or "").strip() or None
+    holder = (body.account_holder or "").strip() or None
+    if bool(acc) != bool(holder):
+        raise HTTPException(status_code=422, detail="계좌번호와 예금주를 함께 입력하세요(둘 다 비우면 공통 계좌를 씁니다).")
+    before = mask_account(d.bank_account) if d.bank_account else None
+    d.bank_account, d.account_holder = (encrypt_str(acc) if acc else None), holder
+    d.updated_by = user.id
+    record_audit(db, table_name="dormitory", record_id=d.id, loan_id=None, action="UPDATE", user_id=user.id,
+                 field="bank_account", before=before, after=mask_account(d.bank_account) if acc else None,
+                 reason="기숙사 입금계좌 변경")
+    db.commit()
+    return get_account(dormitory_id, db, user)

@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api/client";
 import type { LoanCreate, Me } from "../../api/types";
 import { Button, Card, Field, MoneyInput, Notice, PageHeader, RateField, inputCls, moneyHint } from "../../components/ui";
 import { setFlash } from "../../lib/flash";
+import { DormitoryDialog } from "./DormitoryDialog";
 import { won } from "../../lib/format";
 import { canWrite } from "../../lib/perm";
 import { fundShort, periodsPerYear, useRefData } from "../../lib/refdata";
@@ -28,6 +29,12 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
   });
   const [codeTouched, setCodeTouched] = useState(false);
   const [generate, setGenerate] = useState(true);
+  const [dormOpen, setDormOpen] = useState(false);
+  const [newDorm, setNewDorm] = useState<string | null>(null);
+  useEffect(() => {   // 방금 등록한 기숙사를 바로 고른다
+    const d = newDorm && ref?.dormitories.find((x) => x.dormitory_name === newDorm);
+    if (d) setF((p) => ({ ...p, dormitory_id: d.id }));
+  }, [newDorm, ref]);
   const [errors, setErrors] = useState<Errors>({});
   const [serverErr, setServerErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -115,14 +122,17 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
 
   return (
     <div className="space-y-4">
-      <PageHeader title="차입금 등록" back={{ href: href("loans"), label: "차입금 목록" }}
-        sub="필수 항목(*)을 입력하면 오른쪽에 상환 개요가 미리 계산됩니다." />
+      <PageHeader title="신규등록" back={{ href: href("loans"), label: "차입금 관리" }}
+        sub="필수 항목(*)을 입력하면 오른쪽에 상환 개요가 미리 계산됩니다. 기숙사가 없으면 '기숙사 등록'부터 하세요."
+        actions={<Button onClick={() => setDormOpen(true)}>기숙사 등록</Button>} />
+      {dormOpen && <DormitoryDialog me={me} onClose={() => setDormOpen(false)} onSaved={(name) => { setDormOpen(false); setNewDorm(name); }} />}
+      {newDorm && <Notice tone="success" onClose={() => setNewDorm(null)}>기숙사 '{newDorm}'을(를) 등록했습니다. 아래 기숙사 칸에 선택해 두었습니다.</Notice>}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] items-start">
         <div className="space-y-4 min-w-0">
           <Card title="1. 기본정보">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="기숙사" required error={errors.dormitory_id}
-                hint={dorm ? `${dorm.school_name}` : <>없으면 <a className="underline" href={href("loans")}>차입금 목록</a>에서 기숙사를 먼저 등록하세요.</>}>
+                hint={dorm ? `${dorm.school_name}` : <>없으면 위 '기숙사 등록'으로 먼저 등록하세요.</>}>
                 <select className={inputCls} aria-invalid={inv("dormitory_id")} value={f.dormitory_id} onChange={(e) => set("dormitory_id")(e.target.value)}>
                   <option value="">선택</option>
                   {ref?.dormitories.map((d) => <option key={d.id} value={d.id}>{d.dormitory_name} ({d.school_name})</option>)}

@@ -18,7 +18,7 @@ type Tab = "overdue" | "loan";
 export function PaymentsPage({ me, asOf, tab, loanId }: { me: Me | null; asOf: string; tab: Tab; loanId?: string }) {
   return (
     <div className="space-y-4">
-      <PageHeader title="실제 상환관리" sub={`예정 상환액과 실제 납부액을 비교합니다. 기준일 ${asOf} · 상환일이 휴일이면 다음 영업일이 납부기한입니다.`} />
+      <PageHeader title="상환 실적 관리" sub={`예정 상환액과 실제 납부액을 비교합니다. 기준일 ${asOf} · 상환일이 휴일이면 다음 영업일이 납부기한입니다.`} />
       <Tabs label="실제 상환관리" value={tab} onChange={(t) => go("payments", { tab: t, loan: loanId })}
         tabs={[{ value: "overdue", label: "미납 현황" }, { value: "loan", label: "차입금별 납부" }]} />
       {tab === "overdue" ? <OverdueTab asOf={asOf} /> : <LoanPayments me={me} asOf={asOf} loanId={loanId} />}

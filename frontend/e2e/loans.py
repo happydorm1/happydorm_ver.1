@@ -45,7 +45,19 @@ with sync_playwright() as p:
     expect(page.locator("section[aria-label='차입금 목록']")).to_contain_text("가람관")
     shot(page, "01_loans_list")
 
-    # 2) 기숙사 등록(새 SPC 포함)
+    # 1b) 조회 버튼: 조건을 바꿔도 '조회'를 눌러야 반영
+    page.get_by_role("search", name="차입금 검색조건").get_by_label("재원").select_option(label="주택도시기금")
+    expect(page.get_by_text("조건을 바꿨습니다")).to_be_visible()
+    expect(page.locator("section[aria-label='차입금 목록']")).to_contain_text("공공자금관리기금")
+    page.get_by_role("button", name="조회", exact=True).click()
+    expect(page.locator("section[aria-label='차입금 목록'] tbody")).not_to_contain_text("공공자금관리기금")
+    expect(page.locator("section[aria-label='차입금 목록']")).to_contain_text("거치 ")
+    expect(page.locator("section[aria-label='차입금 목록']")).to_contain_text("상환 27년 (324개월)")
+    page.get_by_role("button", name="초기화").click()
+
+    # 2) 신규등록 메뉴 → 기숙사 등록(새 SPC 포함)
+    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="신규등록").click()
+    expect(page.get_by_role("main").get_by_role("heading", name="신규등록")).to_be_visible()
     page.get_by_role("button", name="기숙사 등록").click()
     dlg = page.get_by_role("dialog", name="기숙사 등록")
     dlg.get_by_label("기숙사명").fill(f"검증관{RUN}")
@@ -56,8 +68,6 @@ with sync_playwright() as p:
     expect(page.get_by_role("status")).to_contain_text(f"검증관{RUN}")
 
     # 3) 차입금 등록 — 필수값 비우고 등록 → 안내, 채우면 미리보기·등록·원리금 테이블 생성
-    page.get_by_role("button", name="차입금 등록").click()
-    expect(page.get_by_role("heading", name="차입금 등록")).to_be_visible()
     page.get_by_role("button", name="등록", exact=True).click()
     expect(page.get_by_text("입력값을 확인하세요")).to_be_visible()
     page.get_by_label(re.compile(r"^기숙사")).select_option(label=f"검증관{RUN} (검증대학교)")
@@ -119,19 +129,23 @@ with sync_playwright() as p:
     expect(page.locator("section[aria-label='변경이력(누가·언제·무엇을)']")).to_contain_text("자금담당(데모)")
     shot(page, "05_history")
 
-    # 7) 원리금 테이블 메뉴에서 차입금 고르기
-    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="원리금 테이블").click()
-    sel = page.get_by_label("차입금 선택")
-    sel.select_option(sel.locator("option", has_text="가람관 · 2017-08-21").first.get_attribute("value"))
-    expect(page.locator("section[aria-label='계산 검증']")).to_contain_text("검토 필요")         # 데모의 금리 미반영 예시
-    shot(page, "06_schedule_menu")
+    # 7) 차입금 관리 목록 → 원리금 테이블 팝업
+    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="차입금 관리").click()
+    page.get_by_role("button", name="2017-08-21_공자-00 원리금 테이블").click()
+    pop = page.get_by_role("dialog", name=re.compile("원리금 테이블 — 가람관"))
+    expect(pop.locator("section[aria-label='계산 검증']")).to_contain_text("검토 필요")         # 데모의 금리 미반영 예시
+    shot(page, "06_schedule_popup")
+    pop.get_by_role("button", name="닫기").click()
+    expect(pop).to_be_hidden()
+    expect(page.get_by_role("button", name="삭제", exact=True).first).to_be_visible()          # 자금담당자도 삭제 가능
 
     # 8) 조회자: 등록 버튼 없음
     v = b.new_page(viewport={"width": 1280, "height": 900})
     login(v, "demo-viewer@example.com")
     v.goto(f"{BASE}/#/loans")
     expect(v.get_by_role("heading", name="차입금 관리").first).to_be_visible()
-    expect(v.get_by_role("button", name="차입금 등록")).to_have_count(0)
+    expect(v.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="신규등록")).to_have_count(0)
+    expect(v.get_by_role("button", name="삭제", exact=True)).to_have_count(0)
     v.goto(f"{BASE}/#/loans/new")
     expect(v.get_by_text("차입금 등록 권한이 없습니다")).to_be_visible()
 
@@ -145,4 +159,4 @@ with sync_playwright() as p:
         assert sw <= 390, f"{path} 가로 넘침 {sw}"
     b.close()
     assert not errors, errors
-print("E2E OK: 차입금 목록·기숙사 등록·차입금 등록(검증·천단위·자동코드·미리보기)·원리금 테이블·금리변동 V2·버전비교·Excel·이력·원리금 메뉴·조회자 권한·휴대폰 폭")
+print("E2E OK: 차입금 목록·조회 버튼·신규등록 메뉴·기숙사 등록·차입금 등록(검증·천단위·자동코드·미리보기)·원리금 테이블·금리변동 V2·버전비교·Excel·이력·원리금 팝업·조회자 권한·휴대폰 폭")

@@ -82,6 +82,10 @@ class Dormitory(Base, AuditMixin):
         Enum(DormitoryStatus), default=DormitoryStatus.IN_PROGRESS, nullable=False
     )
 
+    # Phase 21: 기숙사별 입금계좌(공문에 인쇄). 비우면 공문 양식의 공통 계좌를 쓴다. 계좌번호는 암호화 저장
+    bank_account: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    account_holder: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     spc: Mapped["SPC"] = relationship(back_populates="dormitories")
 
     def __repr__(self) -> str:

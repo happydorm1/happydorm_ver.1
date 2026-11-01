@@ -4,7 +4,7 @@ import type {
   AccessLogItem, AdminAuditItem, Backups, EventListItem, EventRequestItem, Holiday, Notice, NoticeData, NotificationItem,
   OverdueList, Payment, PaymentSummary, SecurityStatus, Template, UserItem,
   Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput, DeletionRecord, AdminDormitory,
-  MigrationBatch, MigrationResult,
+  MigrationBatch, MigrationResult, DormAccount, NoticeTargets, NoticesIssued,
 } from "./types";
 
 const TOKEN_KEY = "access_token";
@@ -127,6 +127,11 @@ export const api = {
   deactivateTemplate: (id: string) => request<Template>(`/document-templates/${id}/deactivate`, undefined, {}),
   adminDormitories: () => request<AdminDormitory[]>("/admin/dormitories"),
   deletions: (includeRestored = false) => request<DeletionRecord[]>("/admin/deletions", includeRestored ? { include_restored: "true" } : undefined),
+  dormAccount: (dormId: string) => request<DormAccount>(`/dormitories/${dormId}/account`),
+  saveDormAccount: (dormId: string, body: { bank_account: string; account_holder: string }) =>
+    request<DormAccount>(`/dormitories/${dormId}/account`, undefined, body, "PUT"),
+  noticeTargets: (p: Record<string, string | undefined>) => request<NoticeTargets>("/notices/targets", p),
+  noticesIssued: (p: Record<string, string | undefined>) => request<NoticesIssued>("/notices/issued", p),
   notice: (id: string) => request<Notice>(`/notices/${id}`),   // SPC 담당자가 열면 '수신'으로 기록
   migrationBatches: () => request<MigrationBatch[]>("/admin/migration/batches"),
   cancelMigration: (id: string, reason: string) => request<{ loans: number; dormitories: number }>(`/admin/migration/batches/${id}/cancel`, undefined, { reason }),

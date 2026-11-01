@@ -15,7 +15,7 @@ const COLS: { key: Key; label: string; num?: boolean }[] = [
 const STATUS: Record<LoanRow["status"], string> = { ACTIVE: "진행중", CLOSED: "종료", REFINANCED_OUT: "대환종료" };
 const PAGE = 20;
 
-function downloadCsv(rows: LoanRow[], asOf: string) {
+export function downloadCsv(rows: LoanRow[], asOf: string) {
   const head = ["기숙사", "학교", "차입금코드", "재원", "금리유형", "적용금리(%)", "상환방식", "상환주기", "상태",
     "차입금(원)", "잔여원금(원)", "다음 상환일", "다음 납부기한", "다음 상환액(원)", "원리금테이블 버전", "검증상태", "중도변수", "금리변동"];
   const esc = (v: unknown) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };

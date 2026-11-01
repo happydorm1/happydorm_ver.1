@@ -144,7 +144,7 @@ export function UsersPage({ me }: { me: Me | null }) {
   const rows = (data ?? []).filter((u) => !q || `${u.name} ${u.email} ${ROLE[u.role]}`.includes(q));
   return (
     <div className="space-y-4">
-      <PageHeader title="사용자·권한" sub="역할에 따라 쓸 수 있는 기능이 정해집니다. 계정은 지우지 않고 비활성화합니다. 모든 변경은 감사로그에 남습니다."
+      <PageHeader title="사용자·권한설정" sub="역할에 따라 쓸 수 있는 기능이 정해집니다. 계정은 지우지 않고 비활성화합니다. 모든 변경은 감사로그에 남습니다."
         actions={<Button variant="primary" onClick={() => setEdit("new")}>사용자 등록</Button>} />
       {msg && <Notice tone="success" onClose={() => setMsg(null)}>{msg}</Notice>}
       {(error || err) && <Notice tone="error" onClose={() => setErr(null)}>{error ?? err}</Notice>}

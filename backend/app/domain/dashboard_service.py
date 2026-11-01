@@ -140,6 +140,10 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
             "schedule_status": version.status.value if version else "NO_SCHEDULE",
             "has_midterm_event": loan.id in midterm_ids,
             "has_rate_change": rate_hist_count.get(loan.id, 0) >= 2,
+            # Phase 21: 차입금 관리 목록용
+            "project_type": dorm.project_type, "grace_start_date": loan.grace_start_date, "grace_end_date": loan.grace_end_date,
+            "principal_repay_start_date": loan.principal_repay_start_date, "repay_period_months": loan.repay_period_months,
+            "maturity_date": max((d for d, m in amounts.items() if m["total"] > 0), default=None),
         })
 
     alerts = build_alert_summary(db, user, as_of, filters=f)

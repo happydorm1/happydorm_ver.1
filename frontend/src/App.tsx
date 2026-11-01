@@ -15,6 +15,7 @@ import { DeletionsPage } from "./pages/admin/DeletionsPage";
 import { MigrationPage } from "./pages/admin/MigrationPage";
 import { EventsPage } from "./pages/events/EventsPage";
 import { NoticesPage } from "./pages/NoticesPage";
+import { NoticeIssuedPage, NoticeTargetsPage } from "./pages/NoticeListsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 
@@ -44,7 +45,7 @@ export default function App() {
   let title = "대시보드";
   let page = <DashboardPage asOf={asOf} canDownload={me?.can_download ?? false} />;
   if (section === "loans") {
-    title = "차입금 관리";
+    title = sub === "new" ? "신규등록" : "차입금 관리";
     if (sub === "new") page = <LoanFormPage me={me} defaultDormitory={route.query.get("dormitory") ?? undefined} />;
     else if (sub) {
       const t = route.query.get("tab") as (typeof TABS)[number] | null;
@@ -54,28 +55,36 @@ export default function App() {
     title = "원리금 테이블";
     page = <SchedulePage me={me} asOf={asOf} loanId={route.query.get("loan") ?? undefined} />;
   } else if (section === "events") {
-    title = "이벤트 관리";
+    title = "이벤트 등록";
     const t = route.query.get("tab");
     page = <EventsPage me={me} asOf={asOf} loanId={route.query.get("loan") ?? undefined}
       tab={t === "list" || t === "approval" ? t : "new"} />;
   } else if (section === "payments") {
-    title = "실제 상환관리";
+    title = "상환 실적 관리";
     page = <PaymentsPage me={me} asOf={asOf} tab={route.query.get("tab") === "loan" ? "loan" : "overdue"} loanId={route.query.get("loan") ?? undefined} />;
   } else if (section === "notices") {
-    title = "안내공문";
-    page = <NoticesPage me={me} asOf={asOf} tab={route.query.get("tab") === "templates" ? "templates" : "issue"} dormId={route.query.get("dormitory") ?? undefined} />;
+    if (sub === "targets") { title = "안내공문 · 발송대상 현황"; page = <NoticeTargetsPage me={me} asOf={asOf} />; }
+    else if (sub === "issued") { title = "안내공문 · 발송완료"; page = <NoticeIssuedPage me={me} asOf={asOf} />; }
+    else {
+      title = "안내공문 · 공문 작성·발급";
+      page = <NoticesPage me={me} asOf={asOf} tab={route.query.get("tab") === "templates" ? "templates" : "issue"}
+        dormId={route.query.get("dormitory") ?? undefined} due={route.query.get("due") ?? undefined} />;
+    }
   } else if (section === "notifications") {
     title = "알림";
     page = <NotificationsPage me={me} asOf={asOf} />;
   } else if (section === "admin") {
     const tab = route.query.get("tab") ?? "";
     if (sub === "reference") { title = "기준정보"; page = <ReferencePage me={me} tab={tab} />; }
-    else if (sub === "users") { title = "사용자·권한"; page = <UsersPage me={me} />; }
+    else if (sub === "users") { title = "사용자·권한설정"; page = <UsersPage me={me} />; }
     else if (sub === "migration") { title = "기존 차입금 이관"; page = <MigrationPage me={me} />; }
     else if (sub === "deletions") { title = "삭제·복구"; page = <DeletionsPage me={me} />; }
     else { title = "감사로그"; page = <AuditPage me={me} tab={tab} />; }
   }
-  const navKey = section === "admin" ? `admin/${sub ?? "audit"}` : section ?? "dashboard";
+  const navKey = section === "admin" ? `admin/${sub ?? "audit"}`
+    : section === "loans" && sub === "new" ? "loans/new"
+    : section === "notices" ? `notices/${sub === "issued" ? "issued" : "targets"}`
+    : section === "schedule" ? "loans" : section ?? "dashboard";
 
   return (
     <Layout asOf={asOf} onAsOf={setAsOf} me={me} section={navKey} title={title}

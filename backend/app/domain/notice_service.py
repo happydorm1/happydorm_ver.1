@@ -99,10 +99,16 @@ def build_notice_data(
         it["label"] = name if fund_counts[name] == 1 else f"{name} ({it['loan'].loan_code})"
 
     cfg = dict(reveal_account(template.config) or {})   # 양식의 계좌는 암호화 저장
+    cfg["account_source"] = "TEMPLATE"
+    if dormitory.bank_account and dormitory.account_holder:   # 기숙사별 입금계좌가 있으면 그것을 쓴다(Phase 21)
+        cfg.update(reveal_account({"bank_account": dormitory.bank_account}) | {"account_holder": dormitory.account_holder},
+                   account_source="DORMITORY")
+    if account_override and any(account_override.values()):
+        cfg["account_source"] = "OVERRIDE"
     if account_override:
         cfg.update({k: v for k, v in account_override.items() if v})
     if not cfg.get("bank_account") or not cfg.get("account_holder"):
-        raise NoticeError("공문 양식에 입금계좌(bank_account)와 예금주(account_holder)가 등록되어 있지 않습니다.")
+        raise NoticeError("입금계좌가 없습니다. 안내공문 › 해당 기숙사의 '입금계좌'를 등록하거나 공문 양식에 공통 계좌를 등록하세요.")
 
     holidays = load_holidays(db)
     warnings = []
@@ -138,6 +144,7 @@ def build_notice_data(
         "payment_deadline": deadline.isoformat(),
         "payment_deadline_adjusted": adjusted,
         "account": {"bank_account": cfg["bank_account"], "account_holder": cfg["account_holder"]},
+        "account_source": cfg.get("account_source", "TEMPLATE"),
         "interest_periods": [
             {"label": line(i), "start": i["start"].isoformat(), "end": i["end"].isoformat(),
              "days": (i["end"] - i["start"]).days, "note": DAY_COUNT_NOTE, "ipmt": i["ipmt"]}
