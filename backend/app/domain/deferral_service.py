@@ -5,7 +5,8 @@
 1) 접수시점과 일치(이후 가장 가까운)하는 정규회차 1건을 동결(원금/원금+이자/이자 중 선택)
 2) 정규 스케줄의 다른 회차는 전혀 영향받지 않음(금액 불변)
 3) 동결일 + 1년부터, 입력된 주기(분기/반기)·횟수로 분할 회수 — 정규 회차 금액에 "가산"
-4) 회수 중인 잔여 동결원금에 매 회차 별도 단리이자 부과
+4) 유예원금 이자 — 원금+이자 유예: 회수 조각 × 회수체인 일수(첨부3)
+   원금만 유예: 잔여 유예원금 × 직전 납부일부터 일수, 동결 후 완제까지 모든 납부일(2018-12-28_주택)
 5) 마지막 회수회차에서 원단위 자동보정
 6) 기존 스케줄은 삭제하지 않고 새 버전(V+1)으로 저장
 """
@@ -178,6 +179,11 @@ def apply_deferral(
     # 기존에 존재하던 정규회차와 날짜가 겹치더라도 동일하게 적용된다.
     chain_prev_due = _previous_due_date(recovery_start_date)
     newly_inserted_rows: list[RepaymentScheduleRow] = []
+    # 원금만 유예한 경우(2018-12-28_주택 수작업 테이블로 확인): 유예원금 '잔액' × 직전 납부일부터의 일수로,
+    # 동결일 이후 완제까지의 모든 납부일(회수 시작 전 정규회차 포함)에 이자를 부과한다.
+    balance_mode = defer_target == DeferTarget.PRINCIPAL
+    recovery_dates: list[tuple[date, RepaymentScheduleRow, int]] = []
+    recovery_by_target: dict[uuid.UUID, DeferralRecoveryRow] = {}
 
     for k in range(1, recovery_count + 1):
         chain_days = days_between(chain_prev_due, due_date)
@@ -213,9 +219,12 @@ def apply_deferral(
 
         # 1단계(첨부3)에서 실데이터로 확인된 규칙: 누적 잔여 동결원금이 아니라
         # '해당 회차에 회수되는 원금(Z)' 자체에 대해, 회수체인 상의 일수만큼만 단리로 계산한다.
-        additional_interest = calc_simple_interest(
+        # (원금+이자 유예) 첨부3 규칙: 회수되는 조각 × 회수체인 일수.
+        # (원금만 유예) 잔액 방식은 회수 루프가 끝난 뒤 아래 4-1)에서 따로 계산한다.
+        additional_interest = 0 if balance_mode else calc_simple_interest(
             principal_splits[k - 1], chain_days, float(target_row.applied_rate), loan.interest_rounding
         )
+        recovery_dates.append((due_date, target_row, principal_splits[k - 1]))
 
         recovery_row = DeferralRecoveryRow(
             deferral_id=deferral.id,
@@ -227,12 +236,50 @@ def apply_deferral(
             created_by=created_by,
         )
         db.add(recovery_row)
+        recovery_by_target[target_row.id] = recovery_row
 
         target_row.unpaid_interest_amount += interest_splits[k - 1] + additional_interest
         target_row.remark = ((target_row.remark + " / ") if target_row.remark else "") + f"상환유예 회수({k}/{recovery_count})"
 
         chain_prev_due = due_date
         due_date = add_months_eom(due_date, recovery_cycle_months)
+
+    # 4-1) 원금만 유예 — 잔여 유예원금 이자
+    if balance_mode and recovery_dates:
+        last_recovery = recovery_dates[-1][0]
+        recovered_before = 0
+        recovery_on: dict[date, int] = {}
+        for d, _, amt in recovery_dates:
+            recovery_on[d] = recovery_on.get(d, 0) + amt
+        # 첫 이자 기간의 시작 = 동결 회차(실지급 행)의 이자계산 시작일. 동결 회차의 정규 이자는 유예원금을
+        # 제하지 않고 그대로 두고, 유예원금 이자를 그 기간부터 추가로 부과한다(수작업 테이블 AD30 = V29+V30, 244일).
+        prev = frozen_row.interest_calc_start or frozen_row.due_date
+        for d in all_due_dates_sorted:
+            if d <= frozen_row.due_date or d > last_recovery:
+                continue
+            cands = [r for r in rows_by_due_date[d] if r.row_type != RowType.YEAR_END_SPLIT_MEMO]
+            if not cands:
+                continue
+            target_row = max(cands, key=lambda r: r.seq_no)
+            remaining = frozen_principal_total - recovered_before
+            interest = calc_simple_interest(remaining, days_between(prev, d), float(target_row.applied_rate),
+                                            loan.interest_rounding)
+            rr = recovery_by_target.get(target_row.id)
+            if rr is None:
+                # 회수 시작 전 정규회차 — 회수원금 0, 유예원금 이자만(순번 0)
+                rr = DeferralRecoveryRow(
+                    deferral_id=deferral.id, schedule_row_id=target_row.id, installment_seq=0,
+                    recovery_principal=0, recovery_interest=0, additional_interest_on_frozen_principal=0,
+                    created_by=created_by,
+                )
+                db.add(rr)
+                recovery_by_target[target_row.id] = rr
+                target_row.remark = ((target_row.remark + " / ") if target_row.remark else "") + "상환유예원금 이자"
+            rr.additional_interest_on_frozen_principal += interest
+            target_row.unpaid_interest_amount += interest
+            recovered_before += recovery_on.get(d, 0)
+            prev = d
+        db.flush()
 
     # 새로 삽입된 회수전용 행을 포함해 due_date(및 동일일자 내 기존순서) 기준으로 seq_no 재정렬
     all_rows_ordered = sorted(

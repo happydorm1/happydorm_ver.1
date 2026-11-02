@@ -19,6 +19,9 @@ export const auth = {
   clear() { try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* noop */ } },
 };
 
+/** 서버 데이터를 바꾸는 요청(POST·PUT·DELETE)이 성공할 때마다 1씩 증가 — 목록 캐시(차입금 선택 등)가 오래된 값을 쓰지 않도록 */
+export const dataVersion = { n: 0 };
+
 async function request<T>(path: string, params?: Record<string, string | undefined>, body?: unknown,
                           method?: "POST" | "PUT" | "DELETE"): Promise<T> {
   const qs = new URLSearchParams();
@@ -42,6 +45,7 @@ async function request<T>(path: string, params?: Record<string, string | undefin
     } catch { /* 본문 없음 */ }
     throw new ApiError(res.status, detail);
   }
+  if (method || body !== undefined) dataVersion.n += 1;
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -230,6 +234,7 @@ export async function runMigration(action: "validate" | "apply", file: File, cut
   fd.append("file", file);
   fd.append("cutoff_date", cutoffDate);
   fd.append("mark_paid", markPaid ? "true" : "false");
+  dataVersion.n += 1;
   const res = await fetch(`/api/v1/admin/migration/${action}`, { method: "POST", body: fd,
     headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {} });
   if (res.status === 401) { auth.clear(); window.dispatchEvent(new Event("auth:expired")); throw new ApiError(401, "로그인이 만료되었습니다."); }

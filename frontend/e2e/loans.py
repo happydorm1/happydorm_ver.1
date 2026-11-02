@@ -59,6 +59,10 @@ with sync_playwright() as p:
     expect(page.locator("section[aria-label='차입금 목록']")).to_contain_text("상환 27년 (324개월)")
     page.get_by_role("button", name="초기화").click()
 
+    # 1c) 이벤트 등록 화면을 먼저 열어 차입금 선택 목록을 읽어 둔다(아래 8a에서 새 차입금이 바로 나오는지 확인)
+    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="이벤트 등록").click()
+    expect(page.get_by_label("차입금 선택")).to_contain_text("가람관")
+
     # 2) 신규등록 메뉴 → 기숙사 등록(새 SPC 포함)
     page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="신규등록").click()
     expect(page.get_by_role("main").get_by_role("heading", name="신규등록")).to_be_visible()
@@ -112,6 +116,12 @@ with sync_playwright() as p:
     table = page.locator("section[aria-label='원리금 테이블']")
     expect(table).to_contain_text("총 원금 1,768,000,000원")
     shot(page, "03_schedule")
+
+    # 4a) 새로고침 없이 이벤트 등록 → 방금 등록한 차입금이 선택 목록에 있어야 함
+    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="이벤트 등록").click()
+    expect(page.get_by_label("차입금 선택")).to_contain_text(f"2015-08-21_공자-{RUN}")
+    page.go_back()
+    expect(page.get_by_role("tab", name=re.compile("금리이력"))).to_be_visible()
 
     # 5) 금리이력 → 금리변동 적용(2022-02-28, 2.32%) → V2, 버전 비교
     page.get_by_role("tab", name=re.compile("금리이력")).click()

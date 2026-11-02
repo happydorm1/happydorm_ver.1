@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
-import { api } from "../api/client";
+import { api, dataVersion } from "../api/client";
 import type { LoanRow } from "../api/types";
 import { inputCls, useAsync } from "./ui";
 
-let cache: { asOf: string; p: Promise<LoanRow[]> } | null = null;
-/** 권한 범위의 차입금 목록(대시보드 계산값 재사용) — 화면 사이 이동 시 다시 읽지 않는다. 등록·이벤트 후에는 invalidateLoans() */
+let cache: { asOf: string; ver: number; p: Promise<LoanRow[]> } | null = null;
+/** 권한 범위의 차입금 목록(대시보드 계산값 재사용) — 화면 사이 이동 시 다시 읽지 않는다.
+ *  단, 그 사이 저장·삭제 등 데이터 변경이 있었으면(dataVersion) 새로 읽는다 — 신규등록한 차입금이 바로 선택 목록에 나오도록. */
 export function loadLoans(asOf: string): Promise<LoanRow[]> {
-  if (!cache || cache.asOf !== asOf) cache = { asOf, p: api.dashboard(asOf, {}).then((d) => d.loans) };
+  if (!cache || cache.asOf !== asOf || cache.ver !== dataVersion.n)
+    cache = { asOf, ver: dataVersion.n, p: api.dashboard(asOf, {}).then((d) => d.loans) };
   cache.p.catch(() => { cache = null; });
   return cache.p;
 }
