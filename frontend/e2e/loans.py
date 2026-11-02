@@ -29,6 +29,10 @@ def login(page, email):
         page.get_by_role("button", name="나중에").click()
     except Exception:
         pass
+    # 메뉴 묶음 펼치기(Phase 22: 토글 메뉴 — 펼친 상태는 브라우저에 기억됨)
+    _m = page.get_by_role("navigation", name="주 메뉴")
+    while _m.locator("button[aria-expanded='false']:visible").count():
+        _m.locator("button[aria-expanded='false']:visible").first.click()
 
 
 with sync_playwright() as p:

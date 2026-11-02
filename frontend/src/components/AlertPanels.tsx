@@ -100,7 +100,7 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
             {x.notice_issued
               ? <span className={`rounded border px-1.5 text-[11px] ${x.notice_received ? "border-good" : "border-warning text-warning-ink"}`}>
                   발급완료{x.notice_received ? " · 수신" : " · 미수신"}</span>
-              : <a href={`#/notices?dormitory=${x.dormitory_id ?? ""}&due=${x.due_date}`} className="rounded border border-line px-1.5 text-[11px] hover:bg-surface-2">미발급 › 발급</a>}
+              : <a href={`#/notices?dormitory=${x.dormitory_id ?? ""}&due=${x.due_date}`} className="rounded border border-line px-1.5 text-[11px] hover:bg-surface-2">미발급 → 발급</a>}
           </div>
         </li>
       )} />

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* 나눔스퀘어 AC: 없는 글자(드문 한글 음절·일부 기호)는 브라우저가 시스템 글꼴로 대신 그린다.
+   (구판 나눔스퀘어는 비밀번호 가림 •, ›, 드문 음절을 '빈 글자'로 갖고 있어 투명하게 보였음 — Phase 22b)
+   unicode-range로 한글·영문·숫자·기본 문장부호에만 쓰고, 비밀번호 칸은 항상 시스템 글꼴. */
+/* 글꼴: 나눔스퀘어(OFL) — 사내망에서도 보이도록 web/fonts에 함께 둔다(2차 요청: 교육부 누리집 메뉴와 같은 계열) */
+@font-face { font-family: "NanumSquare"; font-weight: 400; font-display: swap; src: url("/fonts/NanumSquare_acR.woff2") format("woff2"); unicode-range: U+0020-007E, U+00A0-00FF, U+1100-11FF, U+3130-318F, U+AC00-D7A3, U+2010-2015, U+2018-201A, U+201C-201E, U+2026, U+2190-2193, U+25B2, U+25BC; }
+@font-face { font-family: "NanumSquare"; font-weight: 700; font-display: swap; src: url("/fonts/NanumSquare_acB.woff2") format("woff2"); unicode-range: U+0020-007E, U+00A0-00FF, U+1100-11FF, U+3130-318F, U+AC00-D7A3, U+2010-2015, U+2018-201A, U+201C-201E, U+2026, U+2190-2193, U+25B2, U+25BC; }
+@font-face { font-family: "NanumSquare"; font-weight: 800; font-display: swap; src: url("/fonts/NanumSquare_acEB.woff2") format("woff2"); unicode-range: U+0020-007E, U+00A0-00FF, U+1100-11FF, U+3130-318F, U+AC00-D7A3, U+2010-2015, U+2018-201A, U+201C-201E, U+2026, U+2190-2193, U+25B2, U+25BC; }
+
 /*
  * 디자인 토큰 — 화면 코드는 원색 hex가 아니라 역할(이름)로만 색을 쓴다.
  * 다크모드: OS 설정을 따르되, 사용자가 토글로 고르면(data-theme) 그쪽이 이긴다.
@@ -26,6 +34,8 @@
   --status-critical: #d03b3b;
   --status-critical-ink: #b22b2b;  /* 밝은 배경 위 글자용(대비 확보) */
   --status-warning-ink: #8a5a00;
+  --nav-accent: #12325a;     /* 메뉴: 상위 항목 표시선·선택 글자 */
+  --nav-active: #e7edf6;     /* 메뉴: 선택 항목 배경 */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -46,6 +56,8 @@
     --track: #2e2e2b;
     --status-critical-ink: #f08a8a;
     --status-warning-ink: #fab219;
+    --nav-accent: #8db8f0;
+    --nav-active: #1e2a3b;
   }
 }
 
@@ -66,6 +78,8 @@
   --track: #2e2e2b;
   --status-critical-ink: #f08a8a;
   --status-warning-ink: #fab219;
+    --nav-accent: #8db8f0;
+    --nav-active: #1e2a3b;
 }
 
 @theme inline {
@@ -88,7 +102,9 @@
   --color-critical: var(--status-critical);
   --color-critical-ink: var(--status-critical-ink);
   --color-warning-ink: var(--status-warning-ink);
-  --font-sans: "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --color-nav-accent: var(--nav-accent);
+  --color-nav-active: var(--nav-active);
+  --font-sans: "NanumSquare", "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
 }
 
 html, body, #root { height: 100%; }
@@ -100,4 +116,5 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 .tabular { font-variant-numeric: tabular-nums; }
+input[type="password"] { font-family: system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; letter-spacing: 0.1em; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

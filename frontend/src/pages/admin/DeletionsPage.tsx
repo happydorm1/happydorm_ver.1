@@ -21,7 +21,7 @@ export function DeletionsPage({ me }: { me: Me | null }) {
       <Dormitories key={`d${key}`} onChanged={changed} />
       <History key={`h${key}`} onChanged={changed} />
       <p className="text-xs text-ink-3 px-1">차입금은 차입금 상세 위쪽 '차입금 삭제', 원리금 테이블은 원리금 테이블 탭의 '이 버전 삭제'·'전체 삭제',
-        이벤트는 이벤트 관리 › 이벤트 이력(또는 차입금 상세 › 이벤트·변경이력)의 '삭제', 안내공문은 발급 이력의 '삭제'로 지웁니다.
+        이벤트는 이벤트 등록 → 이벤트 이력(또는 차입금 상세 → 이벤트·변경이력)의 '삭제', 안내공문은 발급 이력의 '삭제'로 지웁니다.
         이벤트·버전은 가장 최근 것부터 지우고, 복구는 지운 반대 순서(나중에 지운 것부터)로 합니다.</p>
     </div>
   );

@@ -16,7 +16,7 @@ function addDays(iso: string, n: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** 원리금 상환 › 안내공문 › 발송대상 현황 — 기숙사·상환예정일 단위. 누르면 공문 작성·발급 화면으로. */
+/** 원리금 상환 → 안내공문 → 발송대상 현황 — 기숙사·상환예정일 단위. 누르면 공문 작성·발급 화면으로. */
 export function NoticeTargetsPage({ me, asOf }: { me: Me | null; asOf: string }) {
   const [draft, setDraft] = useState({ mode: "default", from: asOf, to: addDays(asOf, 90), withIssued: false });
   const [q, setQ] = useState(draft);
@@ -88,7 +88,7 @@ export function NoticeTargetsPage({ me, asOf }: { me: Me | null; asOf: string })
   );
 }
 
-/** 원리금 상환 › 안내공문 › 발송완료 — 발급한 공문과 기숙사 측 수신 확인 여부 */
+/** 원리금 상환 → 안내공문 → 발송완료 — 발급한 공문과 기숙사 측 수신 확인 여부 */
 export function NoticeIssuedPage({ me, asOf }: { me: Me | null; asOf: string }) {
   const ref = useRefData();
   const [draft, setDraft] = useState({ from: addDays(asOf, -60), to: "", received: "", dorm: "" });

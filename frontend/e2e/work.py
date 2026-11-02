@@ -31,6 +31,10 @@ def login(page, email):
     except Exception:
         pass
     page.fill("header input[type=date]", "2026-10-28")
+    # 메뉴 묶음 펼치기(Phase 22: 토글 메뉴 — 펼친 상태는 브라우저에 기억됨)
+    _m = page.get_by_role("navigation", name="주 메뉴")
+    while _m.locator("button[aria-expanded='false']:visible").count():
+        _m.locator("button[aria-expanded='false']:visible").first.click()
 
 
 def pick(sel, text):

@@ -38,6 +38,10 @@ def login(page, email, pw="demo1234!", expect_popup=None):
     page.fill("header input[type=date]", AS_OF)
     expect(page.get_by_text(f"기준일 {AS_OF}")).to_be_visible()
     page.wait_for_load_state("networkidle")
+    # 메뉴 묶음 펼치기(Phase 22: 토글 메뉴 — 펼친 상태는 브라우저에 기억됨)
+    _m = page.get_by_role("navigation", name="주 메뉴")
+    while _m.locator("button[aria-expanded='false']:visible").count():
+        _m.locator("button[aria-expanded='false']:visible").first.click()
 
 
 def table_count(page) -> int:

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Me, Role } from "../api/types";
 import { PasswordDialog } from "./PasswordDialog";
 
@@ -7,27 +7,97 @@ const ROLE_LABEL: Record<Role, string> = {
   SPC_MANAGER: "SPC 담당자", VIEWER: "조회자",
 };
 
-// 메뉴 구성은 3단계 설계서(메뉴·화면 설계)를 따른다. 아직 화면이 없는 메뉴는 '예정'으로 표시하고 누를 수 없다.
+// 메뉴 구성(Phase 21, 2차 요청서) — 3수준 트리. 하위가 있는 항목은 눌러서 펼치고 접는다(Phase 22).
 type Who = "all" | "foundation" | "writer" | "admin" | "staff";
-type Item = { label: string; route?: string; who?: Who; heading?: boolean; indent?: boolean };
-/** Phase 21 메뉴 구성(2차 요청서). heading = 하위 묶음 제목(누르지 않음), indent = 그 아래 항목 */
-export const MENU: { group: string; items: Item[] }[] = [
-  { group: "", items: [{ label: "대시보드", route: "dashboard" }] },
-  { group: "차입금 마스터", items: [
-    { label: "차입금 등록", heading: true, who: "writer" },
-    { label: "신규등록", route: "loans/new", who: "writer", indent: true },
-    { label: "기존 차입금 이관", route: "admin/migration", who: "admin", indent: true },
+export type NavNode = { label: string; route?: string; who?: Who; children?: NavNode[] };
+export const MENU: NavNode[] = [
+  { label: "대시보드", route: "dashboard" },
+  { label: "차입금 마스터", children: [
+    { label: "차입금 등록", who: "writer", children: [
+      { label: "신규등록", route: "loans/new", who: "writer" },
+      { label: "기존 차입금 이관", route: "admin/migration", who: "admin" }] },
     { label: "이벤트 등록", route: "events", who: "foundation" },
     { label: "차입금 관리", route: "loans" }] },
-  { group: "원리금 상환", items: [
-    { label: "안내공문", heading: true, who: "staff" },
-    { label: "발송대상 현황", route: "notices/targets", who: "writer", indent: true },
-    { label: "발송완료", route: "notices/issued", who: "staff", indent: true },
+  { label: "원리금 상환", children: [
+    { label: "안내공문", who: "staff", children: [
+      { label: "발송대상 현황", route: "notices/targets", who: "writer" },
+      { label: "발송완료", route: "notices/issued", who: "staff" }] },
     { label: "상환 실적 관리", route: "payments", who: "staff" }] },
-  { group: "마이페이지", items: [{ label: "알림", route: "notifications" }, { label: "기준정보", route: "admin/reference", who: "writer" }] },
-  { group: "관리자", items: [{ label: "사용자·권한설정", route: "admin/users", who: "admin" },
+  { label: "마이페이지", children: [{ label: "알림", route: "notifications" }, { label: "기준정보", route: "admin/reference", who: "writer" }] },
+  { label: "관리자", children: [{ label: "사용자·권한설정", route: "admin/users", who: "admin" },
     { label: "감사로그", route: "admin/audit", who: "admin" }, { label: "삭제·복구", route: "admin/deletions", who: "admin" }] },
 ];
+
+function visible(nodes: NavNode[], role?: Role): NavNode[] {
+  return nodes.filter((n) => allowed(n.who, role))
+    .map((n) => (n.children ? { ...n, children: visible(n.children, role) } : n))
+    .filter((n) => n.route || (n.children && n.children.length));
+}
+const containsRoute = (n: NavNode, r: string): boolean => n.route === r || Boolean(n.children?.some((c) => containsRoute(c, r)));
+const OPEN_KEY = "nav-open";
+
+function Chevron({ open }: { open: boolean }) {
+  return <svg aria-hidden viewBox="0 0 16 16" className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}>
+    <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+/** 1수준(묶음)·2수준(메뉴) 굵게, 3수준은 보통. 글자는 수준이 내려갈수록 작게. 선택 메뉴는 연한 바탕 + 왼쪽 표시선 */
+function SideNav({ role, section, onNavigate }: { role?: Role; section: string; onNavigate: () => void }) {
+  const tree = visible(MENU, role);
+  const [open, setOpen] = useState<Set<string>>(() => {
+    try { const v = localStorage.getItem(OPEN_KEY); if (v) return new Set(JSON.parse(v) as string[]); } catch { /* 저장 불가 환경 */ }
+    return new Set<string>();
+  });
+  // 지금 보고 있는 화면의 상위 항목은 항상 펼친다
+  useEffect(() => {
+    const need: string[] = [];
+    const walk = (ns: NavNode[], path: string[]) => ns.forEach((n) => {
+      if (n.children) { if (containsRoute(n, section)) need.push(...path, n.label); walk(n.children, [...path, n.label]); }
+    });
+    walk(tree, []);
+    if (need.some((k) => !open.has(k))) setOpen((o) => new Set([...o, ...need]));
+  }, [section, role]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = (key: string) => setOpen((o) => {
+    const n = new Set(o);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify([...n])); } catch { /* noop */ }
+    return n;
+  });
+
+  const link = (n: NavNode, level: 1 | 2 | 3) => {
+    const active = section === n.route;
+    const size = level === 1 ? "text-[15px] font-extrabold pl-4" : level === 2 ? "text-[14px] font-bold pl-7" : "text-[13px] font-normal pl-10";
+    return (
+      <a key={n.label} href={`#/${n.route}`} onClick={onNavigate} aria-current={active ? "page" : undefined}
+        className={`relative flex items-center pr-4 py-2.5 ${size} ${active ? "bg-nav-active text-nav-accent" : level === 3 ? "text-ink-2 hover:text-ink" : "text-ink"} hover:bg-surface-2`}>
+        {active && <span aria-hidden className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-nav-accent" />}
+        {level === 3 && <span aria-hidden className="mr-2 text-ink-3">·</span>}{n.label}
+      </a>
+    );
+  };
+  const group = (n: NavNode, level: 1 | 2, key: string): ReactNode => {
+    const isOpen = open.has(key);
+    const has = containsRoute(n, section);
+    const id = `nav-${key.replace(/[^가-힣a-z0-9]/gi, "")}`;
+    return (
+      <div key={key}>
+        <button type="button" aria-expanded={isOpen} aria-controls={id} onClick={() => toggle(key)}
+          className={`w-full flex items-center justify-between pr-4 py-2.5 text-left hover:bg-surface-2 ${level === 1 ? "pl-4 text-[15px] font-extrabold" : "pl-7 text-[14px] font-bold"} ${has ? "text-nav-accent" : "text-ink"}`}>
+          {n.label}<Chevron open={isOpen} />
+        </button>
+        <div id={id} hidden={!isOpen} className={level === 1 ? "pb-1" : ""}>
+          {n.children!.map((c) => (c.children ? group(c, 2, `${key}/${c.label}`) : link(c, (level + 1) as 2 | 3)))}
+        </div>
+      </div>
+    );
+  };
+  return (
+    <nav className="py-2" aria-label="주 메뉴">
+      {tree.map((n) => <div key={n.label} className="border-b border-line">{n.children ? group(n, 1, n.label) : link(n, 1)}</div>)}
+    </nav>
+  );
+}
+
 function allowed(who: Who | undefined, role?: Role) {
   if (!who || who === "all") return true;
   if (!role) return false;
@@ -64,35 +134,13 @@ export function Layout({ children, onLogout, asOf, onAsOf, me, onPasswordChanged
   const themeLabel: Record<Theme, string> = { system: "화면: 시스템", light: "화면: 밝게", dark: "화면: 어둡게" };
 
   return (
-    <div className="min-h-full lg:grid lg:grid-cols-[232px_1fr]">
-      <aside className={`bg-brand text-brand-ink lg:block ${menuOpen ? "block" : "hidden"} lg:min-h-screen`}>
-        <div className="px-5 py-5 border-b border-white/10">
-          <div className="text-[15px] font-bold leading-tight">행복기숙사 원리금 시스템</div>
-          <div className="text-xs opacity-70 mt-1">원리금 산출 · 상환관리</div>
+    <div className="min-h-full lg:grid lg:grid-cols-[244px_1fr]">
+      <aside className={`bg-surface border-r border-line lg:block ${menuOpen ? "block" : "hidden"} lg:min-h-screen`}>
+        <div className="px-5 py-5 bg-brand text-brand-ink">
+          <div className="text-[17px] font-extrabold leading-tight">행복기숙사 원리금 시스템</div>
+          <div className="text-xs opacity-75 mt-1.5">원리금 산출 · 상환관리</div>
         </div>
-        <nav className="px-3 py-3" aria-label="주 메뉴">
-          {MENU.map((g) => ({ ...g, items: g.items.filter((it) => allowed(it.who, me?.role)) })).filter((g) => g.items.length).map((g) => (
-            <div key={g.group || "home"} className="mb-3">
-              {g.group && <div className="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wide opacity-60">{g.group}</div>}
-              {g.items.map((it) => it.heading ? (
-                <div key={it.label} className="px-2 pt-1.5 pb-0.5 text-[12px] opacity-75">{it.label}</div>
-              ) : it.route ? (
-                <a key={it.label} href={`#/${it.route}`} onClick={() => setMenuOpen(false)}
-                  aria-current={section === it.route ? "page" : undefined}
-                  className={`w-full flex items-center rounded-md ${it.indent ? "pl-5 pr-2" : "px-2"} py-2 text-sm hover:bg-white/10
-                    ${section === it.route ? "bg-white/15 font-semibold" : ""}`}>
-                  {it.indent && <span aria-hidden className="mr-1.5 opacity-50">·</span>}{it.label}
-                </a>
-              ) : (
-                <span key={it.label} aria-disabled="true"
-                  className="w-full flex items-center justify-between rounded-md px-2 py-2 text-sm opacity-55 cursor-not-allowed">
-                  <span>{it.label}</span>
-                  <span className="text-[10px] border border-white/30 rounded px-1">예정</span>
-                </span>
-              ))}
-            </div>
-          ))}
-        </nav>
+        <SideNav role={me?.role} section={section} onNavigate={() => setMenuOpen(false)} />
       </aside>
 
       <div className="min-w-0">

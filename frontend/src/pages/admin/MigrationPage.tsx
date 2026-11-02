@@ -178,7 +178,7 @@ function History() {
         <ul className="mt-2 list-disc pl-5 text-sm text-ink-2 space-y-0.5">
           <li>이 이관으로 만든 차입금 {cancel.loan_ids.length}건(원리금 테이블·납부 기록 포함)을 숨김 삭제합니다.</li>
           <li>이 이관으로 새로 만든 기숙사는 남은 차입금이 없을 때 함께 숨깁니다.</li>
-          <li>이관 뒤에 등록한 이벤트·결재 대기 건이 있으면 먼저 정리해야 합니다. 숨긴 항목은 관리자 › 삭제·복구에서 되살릴 수 있습니다.</li>
+          <li>이관 뒤에 등록한 이벤트·결재 대기 건이 있으면 먼저 정리해야 합니다. 숨긴 항목은 관리자 → 삭제·복구에서 되살릴 수 있습니다.</li>
         </ul>
         <Field label="취소 사유" required className="mt-3">
           <input className={inputCls} aria-label="취소 사유" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예) 금리이력 누락 — 고쳐서 다시 이관" />

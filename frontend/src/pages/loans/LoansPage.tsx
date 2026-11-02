@@ -26,7 +26,7 @@ const COLS: { key: Key; label: string; num?: boolean }[] = [
 ];
 const empty = { dorm: "", fund: "", status: "" };
 
-/** 차입금 마스터 › 차입금 관리 — 조회 버튼으로 검색, 원리금 테이블은 팝업, 삭제는 관리자·재단 자금담당자 */
+/** 차입금 마스터 → 차입금 관리 — 조회 버튼으로 검색, 원리금 테이블은 팝업, 삭제는 관리자·재단 자금담당자 */
 export function LoansPage({ me, asOf }: { me: Me | null; asOf: string }) {
   const ref = useRefData();
   const [draft, setDraft] = useState(empty);
@@ -162,7 +162,7 @@ export function LoansPage({ me, asOf }: { me: Me | null; asOf: string }) {
       </Modal>}
       {del && <DeleteDialog title="차입금 삭제" target={`${del.dormitory_name} · ${del.loan_code}`}
         effects={["원리금 테이블·납부·안내공문·알림과 함께 모든 화면·대시보드·Excel에서 빠집니다.",
-          "관리자가 관리자 › 삭제·복구에서 되살릴 수 있습니다. 삭제 중에는 같은 차입금 코드로 새로 등록할 수 있습니다."]}
+          "관리자가 관리자 → 삭제·복구에서 되살릴 수 있습니다. 삭제 중에는 같은 차입금 코드로 새로 등록할 수 있습니다."]}
         onClose={() => setDel(null)}
         onConfirm={async (reason) => { await api.deleteLoan(del.loan_id, reason); setFlash(`차입금 '${del.loan_code}'을(를) 삭제했습니다.`); setDel(null); reload(); }} />}
     </div>

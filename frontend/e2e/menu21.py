@@ -29,6 +29,10 @@ def login(page, email):
         page.get_by_role("button", name="나중에").click()
     except Exception:
         pass
+    # 메뉴 묶음 펼치기(Phase 22: 토글 메뉴 — 펼친 상태는 브라우저에 기억됨)
+    _m = page.get_by_role("navigation", name="주 메뉴")
+    while _m.locator("button[aria-expanded='false']:visible").count():
+        _m.locator("button[aria-expanded='false']:visible").first.click()
 
 
 def nav(page, name):
@@ -42,6 +46,18 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: errors.append(str(e)))
     login(page, "demo-admin@example.com")
     menu = page.get_by_role("navigation", name="주 메뉴")
+    # Phase 22: 토글 메뉴 — 상위를 누르면 하위가 접히고 펼쳐짐, 글자 크기 1>2>3수준, 1·2수준 굵게, 나눔스퀘어
+    grp = menu.get_by_role("button", name="차입금 마스터")
+    expect(grp).to_have_attribute("aria-expanded", "true")
+    grp.click()
+    expect(grp).to_have_attribute("aria-expanded", "false")
+    expect(menu.get_by_role("link", name="신규등록", exact=True)).to_be_hidden()
+    grp.click()
+    expect(menu.get_by_role("link", name="신규등록", exact=True)).to_be_visible()
+    st = lambda loc: loc.evaluate("e => [parseFloat(getComputedStyle(e).fontSize), Number(getComputedStyle(e).fontWeight)]")  # noqa: E731
+    l1, l2, l3 = st(grp), st(menu.get_by_role("button", name="차입금 등록")), st(menu.get_by_role("link", name="신규등록", exact=True))
+    assert l1[0] > l2[0] > l3[0] and l1[1] >= 700 and l2[1] >= 700 and l3[1] < 700, (l1, l2, l3)
+    assert page.evaluate("document.fonts.check('16px NanumSquare')") and "NanumSquare" in page.evaluate("getComputedStyle(document.body).fontFamily")
     for t in ("차입금 마스터", "차입금 등록", "원리금 상환", "안내공문", "마이페이지", "관리자"):
         expect(menu).to_contain_text(t)
     for link in ("신규등록", "기존 차입금 이관", "이벤트 등록", "차입금 관리", "발송대상 현황", "발송완료", "상환 실적 관리",
@@ -128,5 +144,5 @@ with sync_playwright() as p:
     b.close()
     assert not errors, errors
 
-print("E2E OK: 새 메뉴 구성, 발송대상 → 공문 작성(자동 미리보기) → 기숙사 입금계좌 반영 → 발급 → 발송대상에서 빠짐·발송완료(미수신)·수신 필터, "
+print("E2E OK: 새 메뉴 구성·토글·글자 위계·나눔스퀘어, 발송대상 → 공문 작성(자동 미리보기) → 기숙사 입금계좌 반영 → 발급 → 발송대상에서 빠짐·발송완료(미수신)·수신 필터, "
       "이벤트 등록·상환 실적 관리·기존 차입금 이관 이동, 자금담당자 차입금 삭제 → 관리자 복구, 휴대폰 폭")

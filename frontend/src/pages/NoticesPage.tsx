@@ -104,7 +104,7 @@ function Issue({ me, asOf, dormId, initialDue }: { me: Me | null; asOf: string; 
         </Modal>
       )}
       {dormId && <IssuedList key={`${dormId}-${listKey}`} dormId={dormId} dormName={dorm?.dormitory_name ?? ""} canDownload={me?.can_download ?? false}
-        contacts={contacts.data ?? []} canDelete={isAdmin(me)} onDeleted={(t) => { setMsg(`'${t}' 공문을 삭제했습니다. 관리자 › 삭제·복구에서 되살릴 수 있습니다.`); setListKey((k) => k + 1); }} />}
+        contacts={contacts.data ?? []} canDelete={isAdmin(me)} onDeleted={(t) => { setMsg(`'${t}' 공문을 삭제했습니다. 관리자 → 삭제·복구에서 되살릴 수 있습니다.`); setListKey((k) => k + 1); }} />}
       {dormId && <Contacts dormId={dormId} dormName={dorm?.dormitory_name ?? ""} writer={writer} onChanged={contacts.reload} />}
       {dormId && <AccountCard dormId={dormId} dormName={dorm?.dormitory_name ?? ""} writer={writer} onChanged={() => { if (preview) load(); }} />}
     </div>

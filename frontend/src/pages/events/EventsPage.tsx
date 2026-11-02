@@ -287,7 +287,7 @@ function EventList({ me }: { me: Me | null }) {
           "금리변동·전액대환이었다면 바꿨던 금리이력·재원도 되돌립니다.", "'취소'와 달리 이력 목록에서도 빠집니다(삭제·복구 화면에서 되살림).",
         ] : ["이미 취소된 이벤트입니다. 이력 목록에서 빠지고, 이 이벤트가 만든 원리금 테이블 버전도 숨겨집니다."]}
         onClose={() => setDel(null)}
-        onConfirm={async (reason) => { await api.deleteEvent(del.id, reason); setDel(null); invalidateLoans(); setMsg("이벤트를 삭제했습니다. 관리자 › 삭제·복구에서 되살릴 수 있습니다."); reload(); }} />}
+        onConfirm={async (reason) => { await api.deleteEvent(del.id, reason); setDel(null); invalidateLoans(); setMsg("이벤트를 삭제했습니다. 관리자 → 삭제·복구에서 되살릴 수 있습니다."); reload(); }} />}
       {cancel && <CancelDialog ev={cancel} onClose={() => setCancel(null)} onDone={(v) => { setCancel(null); invalidateLoans(); setMsg(`취소했습니다. 직전 상태를 복원한 V${v}을(를) 만들었습니다.`); reload(); }} />}
     </Card>
   );
