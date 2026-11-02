@@ -47,7 +47,7 @@ def fill(template: Path, out: Path, *, broken: bool):
     wb = load_workbook(template)
     wb["기숙사"].append(["이관테스트관", "이관대학교", "이관테스트(주)", "행복기숙사(사립)", None])
     loan = ["이관테스트관", None, "MIG-E2E-01", "공공자금관리기금", 2_000_000_000, "2019-03-29", "변동", "분기", "원금균등",
-            None, None, None, "2019-06-28", 120, "반올림", 2.21, None]
+            None, None, None, "2019-06-28", None, 120, "반올림", 2.21, None]
     if broken:
         loan[3] = "없는재원"
         loan[5] = "2019/13/40"

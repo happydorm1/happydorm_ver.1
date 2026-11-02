@@ -40,7 +40,7 @@ def _send(h, content, action="validate", cutoff="2024-06-30", mark_paid=True):
 
 def _loan_row(dorm, code, *, amount=100_000_000, rate="3.0", rate_type="변동", school=None, assigned="2023-02-28",
               first="2023-05-31", months=60, fund="공공자금관리기금", method="원금균등"):
-    return [dorm, school, code, fund, amount, assigned, rate_type, "분기", method, None, None, None, first, months, None, rate, None]
+    return [dorm, school, code, fund, amount, assigned, rate_type, "분기", method, None, None, None, first, None, months, None, rate, None]
 
 
 def _find_loan(h, code):
@@ -186,7 +186,7 @@ def test_existing_dorm_reused_no_mark_paid_and_engine_error_is_row_error():
 
     # 금리 적용시작일이 배정일보다 늦어 첫 회차 금리가 없음 → 그 행의 오류로 보고(500 아님)
     bad = _loan_row(dorm["dormitory_name"], f"M-{run}-X")
-    bad[16] = "2024-01-01"
+    bad[17] = "2024-01-01"
     r2 = _send(h, _book(h, dorms=[], loans=[bad])).json()
     assert r2["ok"] is False and "원리금 테이블을 만들지 못했습니다" in str(r2["errors"])
     assert r2["errors"][0]["row"] == 2
@@ -207,3 +207,25 @@ def test_non_admin_forbidden():
     assert client.get(f"{BASE}/batches", headers=fh).status_code == 403
     assert _send(fh, b"x").status_code == 403
     refs(h)
+
+
+def test_end_date_instead_of_months():
+    h = admin_headers()
+    run = uuid.uuid4().hex[:6]
+    _, dorm_id, _ = make_loan(h)
+    dorm = next(d for d in client.get("/api/v1/dormitories", headers=h).json() if d["id"] == dorm_id)
+    ok = _loan_row(dorm["dormitory_name"], f"M-{run}-D", months=None)
+    ok[13] = "2028-02-29"                      # 분기, 2023-05-31 ~ 2028-02-29 → 57 + 3 = 60개월
+    off = _loan_row(dorm["dormitory_name"], f"M-{run}-O", months=None)
+    off[13] = "2028-01-31"                     # 분기 간격과 맞지 않음
+    both = _loan_row(dorm["dormitory_name"], f"M-{run}-B", months=48)
+    both[13] = "2028-02-29"                    # 개월 수와 종료일이 서로 다름
+    none_ = _loan_row(dorm["dormitory_name"], f"M-{run}-N", months=None)
+    r = _send(h, _book(h, dorms=[], loans=[ok, off, both, none_])).json()
+    msgs = {e["row"]: e["message"] for e in r["errors"]}
+    assert 2 not in msgs
+    assert "간격과 맞지 않습니다" in msgs[3] and "60개월과 다릅니다" in msgs[4] and "원금상환종료일을 적으세요" in msgs[5]
+    r = _send(h, _book(h, dorms=[], loans=[ok]), "apply").json()
+    assert r["applied"] is True
+    loan = _find_loan(h, f"M-{run}-D")
+    assert client.get(f"/api/v1/loans/{loan['id']}", headers=h).json()["repay_period_months"] == 60

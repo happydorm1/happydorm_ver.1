@@ -90,8 +90,13 @@ with sync_playwright() as p:
     page.get_by_label("거치시작일").fill("2015-08-21")
     page.get_by_label("거치종료일").fill("2022-08-31")
     page.get_by_label("원금상환시작일").fill("2022-11-30")
-    page.get_by_label("상환기간(개월)").fill("300")
     page.get_by_label("상환주기").select_option(label="분기")
+    page.get_by_label("원금상환종료일").fill("2047-08-31")                          # 종료일 → 상환기간 자동
+    expect(page.get_by_label("상환기간(개월)")).to_have_value("300")
+    page.get_by_label("원금상환종료일").fill("2047-07-31")                          # 분기 간격과 어긋나면 안내 후 가까운 회차로
+    expect(page.get_by_text("간격과 맞지 않아")).to_be_visible()
+    page.get_by_label("원금상환종료일").fill("2047-08-31")
+    expect(page.get_by_label("상환기간(개월)")).to_have_value("300")
     page.get_by_label("상환유형").select_option(label="원금균등")
     preview = page.locator("section[aria-label='상환 개요(미리보기)']")
     expect(preview).to_contain_text("100회")

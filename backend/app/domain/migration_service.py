@@ -41,7 +41,8 @@ SHEETS = {
              ("차입금코드*", "예) 2017-08-21_공자-00 (중복 불가)"), ("재원*", "목록에서 선택"), ("배정금액(원)*", "숫자"),
              ("배정일*", "YYYY-MM-DD"), ("금리유형*", "고정 / 변동"), ("상환주기*", "목록에서 선택"), ("상환방식*", "목록에서 선택"),
              ("거치유형", "거치가 있으면 선택"), ("거치시작일", "YYYY-MM-DD"), ("거치종료일", "YYYY-MM-DD (마지막 거치 이자 납입일 권장)"),
-             ("원금상환시작일*", "첫 원금 상환예정일"), ("상환기간(개월)*", "예) 324"), ("이자끝수처리", "반올림(기본) / 절사"),
+             ("원금상환시작일*", "첫 원금 상환예정일"), ("원금상환종료일", "마지막 원금 상환일(만기) — 넣으면 상환기간(개월)은 비워도 자동 계산"),
+             ("상환기간(개월)", "예) 324 — 원금상환종료일과 둘 중 하나는 필수"), ("이자끝수처리", "반올림(기본) / 절사"),
              ("최초금리(%)*", "예) 2.21"), ("최초금리 적용시작일", "비우면 배정일")],
     "금리이력": [("차입금코드*", "변동금리 등 최초금리 이후 바뀐 금리만"), ("적용시작일*", "YYYY-MM-DD"), ("연금리(%)*", "예) 2.98")],
     "납부예외": [("차입금코드*", "기준일 이전 회차 중 예정대로 납부되지 않은 회차"), ("상환예정일*", "원리금 테이블의 상환예정일"),
@@ -61,6 +62,7 @@ GUIDE = [
     "8. 이관 후 '이관 대조표'를 내려받아 기존 엑셀의 잔여원금·다음 상환액과 맞춰 보세요.",
 ]
 HEAD_FILL = PatternFill("solid", fgColor="0F2A4D")
+OPTIONAL_HEADS = {"원금상환종료일"}   # 나중에 추가한 칸 — 예전 양식 파일에 없어도 된다
 
 
 def build_template(db: Session) -> bytes:
@@ -186,14 +188,16 @@ def _rows(wb, sheet, issues: Issues) -> list[tuple[int, dict]]:
     ws = wb[sheet]
     heads = [_text(c.value).rstrip("*").strip() for c in ws[1]]
     want = [h.rstrip("*") for h, _ in SHEETS[sheet]]
-    missing = [h for h in want if h not in heads]
+    missing = [h for h in want if h not in heads and h not in OPTIONAL_HEADS]
     if missing:
         issues.err(sheet, 1, None, f"제목 줄에 없는 칸: {', '.join(missing)} — 양식의 제목을 바꾸지 마세요.")
         return []
-    idx = {h: heads.index(h) for h in want}
+    idx = {h: heads.index(h) for h in want if h in heads}
     out = []
     for r, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         vals = {h: (row[i] if i < len(row) else None) for h, i in idx.items()}
+        for h in want:
+            vals.setdefault(h, None)   # 예전 양식에 없는 선택 칸(원금상환종료일)
         if all(_text(v) == "" for v in vals.values()):
             continue
         out.append((r, vals))
@@ -245,7 +249,7 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
     for r, v in _rows(wb, "차입금", issues):
         s = "차입금"
         if not _need(issues, s, r, v, "기숙사명", "차입금코드", "재원", "배정금액(원)", "배정일", "금리유형", "상환주기",
-                     "상환방식", "원금상환시작일", "상환기간(개월)", "최초금리(%)"):
+                     "상환방식", "원금상환시작일", "최초금리(%)"):
             continue
         item = {"row": r, "dorm": _text(v["기숙사명"]), "school": _text(v["학교명"]) or None, "code": _text(v["차입금코드"])}
         ok = True
@@ -288,7 +292,7 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             ok = False
         vals = {}
         for col, fn, key in (("배정금액(원)", _int, "amount"), ("배정일", _date, "assigned"), ("거치시작일", _date, "gs"),
-                             ("거치종료일", _date, "ge"), ("원금상환시작일", _date, "first"), ("상환기간(개월)", _int, "months"),
+                             ("거치종료일", _date, "ge"), ("원금상환시작일", _date, "first"), ("원금상환종료일", _date, "last"), ("상환기간(개월)", _int, "months"),
                              ("최초금리(%)", _rate, "rate"), ("최초금리 적용시작일", _date, "rate_start")):
             try:
                 vals[key] = fn(v[col])
@@ -299,8 +303,22 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             if vals["amount"] is None or vals["amount"] <= 0:
                 issues.err(s, r, "배정금액(원)", "0보다 커야 합니다.")
                 ok = False
-            if vals["months"] is None or vals["months"] <= 0:
-                issues.err(s, r, "상환기간(개월)", "0보다 커야 합니다.")
+            if vals["last"] and vals["first"] and cyc is not None:      # 종료일 → 개월 수 = (시작~종료 개월 차) + 주기 개월 수
+                mpp = 12 // int((cyc.extra_value or {}).get("periods_per_year") or 12)
+                diff = (vals["last"].year - vals["first"].year) * 12 + vals["last"].month - vals["first"].month
+                if diff < 0:
+                    issues.err(s, r, "원금상환종료일", "원금상환시작일보다 빠릅니다.")
+                    ok = False
+                elif diff % mpp:
+                    issues.err(s, r, "원금상환종료일", f"상환주기({mpp}개월) 간격과 맞지 않습니다 — 시작일에서 {mpp}개월 단위로 떨어지는 날이어야 합니다.")
+                    ok = False
+                elif vals["months"] is not None and vals["months"] != diff + mpp:
+                    issues.err(s, r, "상환기간(개월)", f"원금상환종료일로 계산한 {diff + mpp}개월과 다릅니다. 둘 중 하나만 적거나 맞춰 주세요.")
+                    ok = False
+                else:
+                    vals["months"] = diff + mpp
+            if ok and (vals["months"] is None or vals["months"] <= 0):
+                issues.err(s, r, "상환기간(개월)", "상환기간(개월) 또는 원금상환종료일을 적으세요(0보다 커야 함).")
                 ok = False
             if (vals["gs"] is None) != (vals["ge"] is None):
                 issues.err(s, r, "거치시작일", "거치시작일과 거치종료일은 둘 다 적거나 둘 다 비워야 합니다.")

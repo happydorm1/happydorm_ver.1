@@ -9,6 +9,12 @@ import { canWrite } from "../../lib/perm";
 import { fundShort, periodsPerYear, useRefData } from "../../lib/refdata";
 import { go, href } from "../../lib/router";
 
+/** 두 날짜 사이 개월 수(연·월만 비교 — 상환일은 보통 월말) */
+function monthDiff(a: string, b: string) {
+  const [y1, m1] = a.split("-").map(Number), [y2, m2] = b.split("-").map(Number);
+  return (y2 - y1) * 12 + (m2 - m1);
+}
+
 function addMonths(d: string, m: number) {
   if (!d) return "";
   const [y, mo] = d.split("-").map(Number);
@@ -24,7 +30,7 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
   const [f, setF] = useState({
     dormitory_id: defaultDormitory ?? "", fund_id: "", loan_code: "", assigned_date: "", assigned_amount: null as number | null,
     rate_type: "FIXED" as "FIXED" | "VARIABLE", rate: "", rate_start: "", rate_end: "", rate_table_name: "", rate_basis: "",
-    grace_type_code_id: "", grace_start: "", grace_end: "", principal_start: "", months: "", cycle: "", method: "",
+    grace_type_code_id: "", grace_start: "", grace_end: "", principal_start: "", principal_end: "", months: "", cycle: "", method: "",
     rounding: "ROUND" as "ROUND" | "ROUNDDOWN",
   });
   const [codeTouched, setCodeTouched] = useState(false);
@@ -58,6 +64,23 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
   const dorm = ref?.dormitories.find((d) => d.id === f.dormitory_id);
   const suggestedCode = f.assigned_date && fund ? `${f.assigned_date}_${fundShort(fund.fund_name)}` : "";
   const loanCode = codeTouched ? f.loan_code : suggestedCode;
+
+  // 원금상환종료일 ↔ 상환기간(개월): 첫 회차가 시작일이므로 개월 수 = (시작~종료 개월 차) + 주기 개월 수
+  const mpp = (() => { const ppy = periodsPerYear(cycle); return ppy ? Math.round(12 / ppy) : 0; })();
+  const endInfo = useMemo(() => {
+    if (!f.principal_start || !f.principal_end || !mpp) return null;
+    const diff = monthDiff(f.principal_start, f.principal_end);
+    if (diff < 0) return { months: null, warn: "원금상환종료일이 시작일보다 빠릅니다." };
+    const off = diff % mpp;
+    return { months: diff - off + mpp, warn: off ? `상환주기(${mpp}개월) 간격과 맞지 않아 ${addMonths(f.principal_start, diff - off)}까지로 계산했습니다.` : null };
+  }, [f.principal_start, f.principal_end, mpp]);
+  useEffect(() => {   // 종료일·시작일·주기가 바뀌면 상환기간(개월)을 자동으로 채운다
+    if (endInfo?.months && String(endInfo.months) !== f.months) set("months")(String(endInfo.months));
+  }, [endInfo?.months]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const setMonthsTyped = (v: string) => {   // 개월 수를 직접 넣으면 종료일 칸은 비운다(마지막 상환일은 오른쪽 상환 개요에 표시)
+    set("months")(v);
+    setF((p) => ({ ...p, principal_end: "" }));
+  };
 
   const summary = useMemo(() => {
     const ppy = periodsPerYear(cycle);
@@ -201,15 +224,21 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
               <Field label="원금상환시작일" required error={errors.principal_start} hint="첫 원금 상환일(보통 월말)">
                 <input type="date" className={inputCls} aria-invalid={inv("principal_start")} value={f.principal_start} onChange={(e) => set("principal_start")(e.target.value)} />
               </Field>
-              <Field label="상환기간(개월)" required error={errors.months} hint={summary ? summary.years : "예: 23.5년 → 282"}>
-                <input inputMode="numeric" className={`${inputCls} text-right tabular`} aria-invalid={inv("months")} value={f.months}
-                  onChange={(e) => set("months")(e.target.value.replace(/[^0-9]/g, ""))} />
+              <Field label="원금상환종료일" hint={endInfo?.warn ?? (mpp ? (f.principal_end ? "상환기간(개월)을 자동 계산했습니다." : summary?.last ? `지금 상환기간 기준 마지막 상환일: ${summary.last}` : "마지막 원금 상환일(만기). 넣으면 상환기간(개월)이 자동 계산됩니다.") : "상환주기를 고르면 상환기간이 자동 계산됩니다.")}
+                error={endInfo?.months === null ? endInfo.warn : undefined}>
+                <input type="date" className={inputCls} aria-label="원금상환종료일" value={f.principal_end}
+                  onChange={(e) => set("principal_end")(e.target.value)} />
               </Field>
               <Field label="상환주기" required error={errors.cycle}>
                 <select className={inputCls} aria-invalid={inv("cycle")} value={f.cycle} onChange={(e) => set("cycle")(e.target.value)}>
                   <option value="">선택</option>
                   {ref?.cycles.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
                 </select>
+              </Field>
+              <Field label="상환기간(개월)" required error={errors.months}
+                hint={summary ? `${summary.years} · ${summary.n}회${endInfo?.months ? " (종료일로 자동 계산)" : ""}` : "종료일을 넣으면 자동 계산(직접 입력도 가능)"}>
+                <input inputMode="numeric" className={`${inputCls} text-right tabular`} aria-invalid={inv("months")} value={f.months}
+                  onChange={(e) => setMonthsTyped(e.target.value.replace(/[^0-9]/g, ""))} />
               </Field>
               <Field label="상환유형" required error={errors.method}
                 hint={method && !["EQUAL_PRINCIPAL", "EQUAL_PAYMENT"].includes(method.code) ? "현재 계산엔진은 원금균등·원리금균등만 원리금 테이블을 만듭니다." : undefined}>
