@@ -10,6 +10,7 @@ from app.schemas.schedule import RepaymentScheduleVersionRead
 
 class RateChangeCreate(BaseModel):
     effective_start_date: date
+    effective_end_date: date | None = None   # 적용종료일(선택) — 영업일 D-30에 '금리변동 예정' 알림
     annual_rate: Decimal = Field(..., gt=0, lt=100)
     rate_table_name: str | None = None
     rate_basis: str | None = None

@@ -12,7 +12,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.domain.rate_service import get_applicable_rate
@@ -38,6 +38,7 @@ def apply_rate_change(
     *,
     effective_start_date: date,
     annual_rate,
+    effective_end_date: date | None = None,
     rate_table_name: str | None,
     rate_basis: str | None,
     created_by: uuid.UUID | None,
@@ -45,6 +46,8 @@ def apply_rate_change(
     loan = db.get(Loan, loan_id)
     if loan is None or loan.is_deleted:
         raise RateChangeError("차입금을 찾을 수 없습니다.")
+    if effective_end_date is not None and effective_end_date <= effective_start_date:
+        raise RateChangeError("적용종료일은 적용시작일 이후여야 합니다.")
 
     fund = db.get(Fund, loan.fund_id)
     method_code = db.get(Code, loan.repay_method_code_id)
@@ -76,11 +79,13 @@ def apply_rate_change(
         same.is_deleted = True
     db.flush()
 
-    # 1) 금리이력 갱신: 직전 open 구간을 닫고 새 구간 추가(7번 요구사항 — 이력관리)
+    # 1) 금리이력 갱신: 직전 구간(종료일이 없거나 새 적용시작일보다 늦게 끝나는)을 닫고 새 구간 추가(7번 요구사항 — 이력관리)
     open_rate = db.execute(
         select(InterestRateHistory)
-        .where(InterestRateHistory.loan_id == loan_id, InterestRateHistory.effective_end_date.is_(None),
-               InterestRateHistory.is_deleted.is_(False))
+        .where(InterestRateHistory.loan_id == loan_id, InterestRateHistory.is_deleted.is_(False),
+               InterestRateHistory.effective_start_date < effective_start_date,
+               or_(InterestRateHistory.effective_end_date.is_(None),
+                   InterestRateHistory.effective_end_date > effective_start_date))
         .order_by(InterestRateHistory.effective_start_date.desc())
     ).scalars().first()
     if open_rate is not None:
@@ -90,7 +95,7 @@ def apply_rate_change(
         InterestRateHistory(
             loan_id=loan_id,
             effective_start_date=effective_start_date,
-            effective_end_date=None,
+            effective_end_date=effective_end_date,   # 입력하면 그 날짜 영업일 D-30부터 '금리변동 예정' 알림
             annual_rate=annual_rate,
             rate_basis=rate_basis,
             rate_table_name=rate_table_name,

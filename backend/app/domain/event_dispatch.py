@@ -28,6 +28,7 @@ def _deferral(db, loan_id, p: DeferralCreate, by):
 
 def _rate_change(db, loan_id, p: RateChangeCreate, by):
     v = apply_rate_change(db, loan_id, effective_start_date=p.effective_start_date, annual_rate=p.annual_rate,
+                          effective_end_date=p.effective_end_date,
                           rate_table_name=p.rate_table_name, rate_basis=p.rate_basis, created_by=by)
     return None, v.id
 

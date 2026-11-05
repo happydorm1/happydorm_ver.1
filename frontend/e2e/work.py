@@ -63,8 +63,24 @@ with sync_playwright() as p:
     expect(page.locator("section[aria-label='적용 전 확인']")).to_contain_text("100,000,000원")
     shot(page, "w01_event_new")
     page.get_by_role("button", name="적용하기").click()
-    page.get_by_role("dialog").get_by_role("button", name="적용", exact=True).click()
-    expect(page.get_by_text(re.compile(r"원리금 테이블 V2을\(를\) 만들었습니다"))).to_be_visible()
+    cdlg = page.get_by_role("dialog", name="조기상환 적용 확인")
+    expect(cdlg).to_contain_text("관련 내용을 적용하시겠습니까?")
+    cdlg.get_by_role("button", name="아니오").click()                       # 아니오 → 아무것도 안 바뀜
+    expect(cdlg).to_be_hidden()
+    page.get_by_role("button", name="적용하기").click()
+    cdlg.get_by_role("button", name="예, 적용합니다").click()
+    done = page.get_by_role("dialog", name="적용 완료")
+    expect(done).to_contain_text(re.compile(r"원리금 테이블 V2을\(를\) 만들었습니다"))
+    done.get_by_role("button", name="확인").click()
+    # 중복 방지: 적용 후 입력값이 비워져 같은 내용을 다시 적용할 수 없음
+    expect(page.get_by_label("접수일(적용일)")).to_have_value("")
+    expect(page.get_by_role("button", name="적용하기")).to_be_disabled()
+    # 금리변동: 적용종료일 입력란(선택) — 적용 전 확인에 표시
+    page.get_by_role("radiogroup", name="이벤트 종류").get_by_text("금리변동").click()
+    page.get_by_label("적용종료일").fill("2027-06-30")
+    expect(page.locator("section[aria-label='적용 전 확인']")).to_contain_text("2027-06-30")
+    expect(page.locator("section[aria-label='적용 전 확인']")).not_to_contain_text("undefined")
+    page.get_by_role("radiogroup", name="이벤트 종류").get_by_text("조기상환").click()
     page.get_by_role("tab", name="이벤트 이력").click()
     row = page.locator("tr", has_text="온새누리관").first
     expect(row).to_contain_text("조기상환")

@@ -46,14 +46,17 @@ export function EventsPage({ me, asOf, tab, loanId }: { me: Me | null; asOf: str
   );
 }
 
+const FORM_DEFAULT: Record<string, string> = { defer_target: "PRINCIPAL_INTEREST", recovery_cycle_months: "3", recovery_count: "10",
+  acceleration_multiplier: "1.5", repay_type: "PARTIAL", fee_amount: "0", refi_type: "FULL" };
+
 function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: string }) {
   const ref = useRefData();
   const [loan, setLoan] = useState<LoanRow | undefined>();
   const [kind, setKind] = useState<Kind>("deferral");
-  const [form, setForm] = useState<Record<string, string>>({ defer_target: "PRINCIPAL_INTEREST", recovery_cycle_months: "3", recovery_count: "10",
-    acceleration_multiplier: "1.5", repay_type: "PARTIAL", fee_amount: "0", refi_type: "FULL" });
+  const [form, setForm] = useState<Record<string, string>>(FORM_DEFAULT);
   const [money, setMoney] = useState<Record<string, number | null>>({});
   const [confirm, setConfirm] = useState(false);
+  const [done, setDone] = useState(false);   // 적용 완료 팝업
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<{ msg: string; loanId: string; v?: number; owner?: { type: AttachmentOwner; id: string } } | null>(null);
@@ -67,7 +70,7 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
     const f = form;
     const reason = f.reason || null;
     switch (kind) {
-      case "rate-change": return { effective_start_date: f.effective_start_date, annual_rate: f.annual_rate, rate_table_name: f.rate_table_name || null, rate_basis: f.rate_basis || null };
+      case "rate-change": return { effective_start_date: f.effective_start_date, effective_end_date: f.effective_end_date || null, annual_rate: f.annual_rate, rate_table_name: f.rate_table_name || null, rate_basis: f.rate_basis || null };
       case "deferral": return { event_date: f.event_date, defer_target: f.defer_target, recovery_cycle_months: Number(f.recovery_cycle_months), recovery_count: Number(f.recovery_count), reason };
       case "acceleration": return { event_date: f.event_date, acceleration_multiplier: f.acceleration_multiplier, reason };
       case "early-repayment": return { event_date: f.event_date, repay_type: f.repay_type, repay_amount: f.repay_type === "PARTIAL" ? money.repay_amount : null, fee_amount: money.fee_amount ?? 0, reason };
@@ -78,7 +81,8 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
   const missing = (() => {
     const f = form;
     if (!selectedId) return "차입금을 고르세요.";
-    if (kind === "rate-change") return !f.effective_start_date ? "적용시작일을 넣으세요." : !f.annual_rate ? "새 금리를 넣으세요." : null;
+    if (kind === "rate-change") return !f.effective_start_date ? "적용시작일을 넣으세요." : !f.annual_rate ? "새 금리를 넣으세요."
+      : f.effective_end_date && f.effective_end_date <= f.effective_start_date ? "적용종료일은 적용시작일 이후여야 합니다." : null;
     if (!f.event_date) return "접수일(적용일)을 넣으세요.";
     if (kind === "early-repayment" && f.repay_type === "PARTIAL" && !money.repay_amount) return "조기상환 금액을 넣으세요.";
     if (kind === "refinancing") {
@@ -106,6 +110,8 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
         ? { msg: `${k.label}을(를) 기안했습니다. 결재권자가 승인하면 원리금 테이블에 반영됩니다.`, loanId: selectedId, owner }
         : { msg: `${k.label}을(를) 적용해 원리금 테이블 V${v}을(를) 만들었습니다. 이전 버전은 그대로 보존됩니다.`, loanId: selectedId, v, owner });
       setConfirm(false);
+      // 같은 내용을 한 번 더 적용(중복)하지 않도록 입력값을 비운다 — 차입금·이벤트 종류는 그대로
+      setForm(FORM_DEFAULT); setMoney({}); setDone(true);
     } catch (e) { setErr(e instanceof Error ? e.message : "적용하지 못했습니다."); setConfirm(false); }
     finally { setBusy(false); }
   }
@@ -113,13 +119,14 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
   const summaryRows: [string, string][] = (() => {
     const f = form;
     const r: [string, string][] = [["차입금", loan ? `${loan.dormitory_name} · ${loan.loan_code}` : selectedId], ["구분", k.label]];
-    if (kind === "rate-change") r.push(["적용시작일", f.effective_start_date], ["새 금리", `${f.annual_rate}%`]);
+    if (kind === "rate-change") r.push(["적용시작일", f.effective_start_date], ["적용종료일", f.effective_end_date || "(미입력)"],
+      ["새 금리", f.annual_rate ? `${f.annual_rate}%` : ""]);
     else r.push(["접수일", f.event_date]);
     if (kind === "deferral") r.push(["유예대상", { PRINCIPAL: "원금", PRINCIPAL_INTEREST: "원금+이자", INTEREST: "이자" }[f.defer_target] ?? ""],
       ["회수", `${f.recovery_cycle_months === "3" ? "분기" : "반기"} ${f.recovery_count}회`]);
     if (kind === "acceleration") r.push(["가속배율", `${f.acceleration_multiplier}배`]);
     if (kind === "early-repayment") r.push(["방식", f.repay_type === "FULL" ? "전액" : "일부"], ...(f.repay_type === "PARTIAL" ? [["금액", won(money.repay_amount ?? 0)] as [string, string]] : []), ["수수료", won(money.fee_amount ?? 0)]);
-    if (kind === "refinancing") r.push(["방식", f.refi_type === "FULL" ? "전액" : "일부"], ["새 재원", ref?.funds.find((x) => x.id === f.new_fund_id)?.fund_name ?? ""], ["새 금리", `${f.new_annual_rate}%`]);
+    if (kind === "refinancing") r.push(["방식", f.refi_type === "FULL" ? "전액" : "일부"], ["새 재원", ref?.funds.find((x) => x.id === f.new_fund_id)?.fund_name ?? ""], ["새 금리", f.new_annual_rate ? `${f.new_annual_rate}%` : ""]);
     return r;
   })();
 
@@ -153,6 +160,9 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
           <div className="grid gap-3 sm:grid-cols-2">
             {kind === "rate-change" ? <>
               <Field label="적용시작일" required><input type="date" className={inputCls} value={form.effective_start_date ?? ""} onChange={(e) => set("effective_start_date")(e.target.value)} /></Field>
+              <Field label="적용종료일" hint="선택 — 넣으면 이 날짜 영업일 30일 전부터 '금리변동 예정' 알림을 보냅니다.">
+                <input type="date" className={inputCls} value={form.effective_end_date ?? ""} min={form.effective_start_date || undefined}
+                  onChange={(e) => set("effective_end_date")(e.target.value)} /></Field>
               <Field label="새 금리(연)" required><RateField aria-label="새 금리" value={form.annual_rate ?? ""} onChange={set("annual_rate")} /></Field>
               <Field label="금리적용표명"><input className={inputCls} value={form.rate_table_name ?? ""} onChange={(e) => set("rate_table_name")(e.target.value)} /></Field>
               <Field label="산출근거"><input className={inputCls} value={form.rate_basis ?? ""} onChange={(e) => set("rate_basis")(e.target.value)} /></Field>
@@ -191,18 +201,6 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
         </Card>
       </div>
       <aside className="xl:sticky xl:top-20 space-y-3">
-        {result && <Notice tone="success">
-          {result.msg}
-          <span className="block mt-1 space-x-3">
-            <a className="underline" href={href(`loans/${result.loanId}`, { tab: "schedule" })}>원리금 테이블 보기</a>
-            <a className="underline" href={href("events", { tab: "list" })}>이벤트 이력</a>
-          </span>
-        </Notice>}
-        {result?.owner && <div className="bg-surface border border-line rounded-xl p-3">
-          <AttachmentPanel compact loanId={result.loanId} owner={result.owner} writable canDownload={me?.can_download ?? false}
-            title={result.owner.type === "EVENT_REQUEST" ? "기안 증빙자료" : "이 이벤트의 증빙자료"}
-            hint={result.owner.type === "EVENT_REQUEST" ? "결재권자가 승인 전에 확인합니다. 승인되면 만들어진 이벤트에도 연결됩니다." : "승인 공문·신청서 등 근거 서류를 붙여 두세요."} />
-        </div>}
         {err && <Notice tone="error" onClose={() => setErr(null)}>{err}</Notice>}
         <Card title="적용 전 확인">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
@@ -213,16 +211,34 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
             {me?.event_approval_required ? "기안하기" : "적용하기"}
           </Button>
           {missing && <p className="mt-2 text-xs text-ink-3" role="status">{missing}</p>}
+          {result && <p className="mt-2 text-xs text-ink-2">최근 처리: {result.msg} <a className="underline" href={href(`loans/${result.loanId}`, { tab: "schedule" })}>원리금 테이블 보기</a></p>}
         </Card>
       </aside>
       {confirm && (
-        <Modal title={`${k.label} ${me?.event_approval_required ? "기안" : "적용"}`} onClose={() => setConfirm(false)}
-          footer={<><Button onClick={() => setConfirm(false)}>취소</Button>
-            <Button variant="primary" disabled={busy} onClick={submit}>{busy ? "계산 중…" : me?.event_approval_required ? "기안" : "적용"}</Button></>}>
-          <p className="text-sm">아래 내용으로 {me?.event_approval_required ? "기안합니다" : "원리금 테이블 새 버전을 만듭니다"}. 계속할까요?</p>
+        <Modal title={`${k.label} ${me?.event_approval_required ? "기안" : "적용"} 확인`} onClose={() => !busy && setConfirm(false)}
+          footer={<><Button disabled={busy} onClick={() => setConfirm(false)}>아니오</Button>
+            <Button variant="primary" disabled={busy} onClick={submit}>{busy ? "계산 중…" : me?.event_approval_required ? "예, 기안합니다" : "예, 적용합니다"}</Button></>}>
+          <p className="text-sm font-semibold">관련 내용을 {me?.event_approval_required ? "기안" : "적용"}하시겠습니까?</p>
+          <p className="mt-1 text-xs text-ink-2">{me?.event_approval_required ? "결재권자가 승인하면 원리금 테이블에 반영됩니다."
+            : "'예'를 누르면 원리금 테이블 새 버전이 바로 만들어집니다. '아니오'를 누르면 아무것도 바뀌지 않습니다."}</p>
           <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
             {summaryRows.map(([a, b]) => <Fragment key={a}><dt className="text-ink-2">{a}</dt><dd className="tabular">{b}</dd></Fragment>)}
           </dl>
+        </Modal>
+      )}
+      {done && result && (
+        <Modal title={me?.event_approval_required ? "기안 완료" : "적용 완료"} onClose={() => setDone(false)}
+          footer={<Button variant="primary" onClick={() => setDone(false)}>확인</Button>}>
+          <Notice tone="success">{result.msg}</Notice>
+          <p className="mt-2 text-sm space-x-3">
+            <a className="underline" href={href(`loans/${result.loanId}`, { tab: "schedule" })}>원리금 테이블 보기</a>
+            <a className="underline" href={href("events", { tab: "list" })}>이벤트 이력</a>
+          </p>
+          {result.owner && <div className="mt-3 border border-line rounded-xl p-3">
+            <AttachmentPanel compact loanId={result.loanId} owner={result.owner} writable canDownload={me?.can_download ?? false}
+              title={result.owner.type === "EVENT_REQUEST" ? "기안 증빙자료(선택)" : "이 이벤트의 증빙자료(선택)"}
+              hint={result.owner.type === "EVENT_REQUEST" ? "결재권자가 승인 전에 확인합니다. 승인되면 만들어진 이벤트에도 연결됩니다." : "승인 공문·신청서 등 근거 서류를 붙여 두세요. 나중에 '이벤트 이력'에서도 붙일 수 있습니다."} />
+          </div>}
         </Modal>
       )}
     </div>

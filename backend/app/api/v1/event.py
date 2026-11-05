@@ -87,6 +87,7 @@ def create_rate_change(
             db,
             loan_id,
             effective_start_date=payload.effective_start_date,
+            effective_end_date=payload.effective_end_date,
             annual_rate=payload.annual_rate,
             rate_table_name=payload.rate_table_name,
             rate_basis=payload.rate_basis,
