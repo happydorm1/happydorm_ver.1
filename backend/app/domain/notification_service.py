@@ -18,6 +18,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.loan_filters import status_condition
 from app.domain.calendar_service import load_holidays
 from app.domain.rate_service import rate_history
 from app.domain.payment_service import PaymentError, payment_summary
@@ -63,7 +64,7 @@ def _loan_targets(db: Session, dormitory_id: uuid.UUID | None):
         select(Loan, Dormitory, Fund)
         .join(Dormitory, Dormitory.id == Loan.dormitory_id)
         .join(Fund, Fund.id == Loan.fund_id)
-        .where(Loan.is_deleted.is_(False), Loan.status == LoanStatus.ACTIVE, Dormitory.is_deleted.is_(False))
+        .where(Loan.is_deleted.is_(False), status_condition([LoanStatus.ACTIVE]), Dormitory.is_deleted.is_(False))
     )
     if dormitory_id:
         stmt = stmt.where(Dormitory.id == dormitory_id)

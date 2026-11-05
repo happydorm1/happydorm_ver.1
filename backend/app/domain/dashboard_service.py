@@ -30,8 +30,11 @@ from app.domain.rate_service import rate_history, rate_on
 from app.domain.schedule_amounts import scheduled_by_due_date
 from app.domain.version_utils import NoScheduleError, get_current_version, read_cache
 from app.engine.business_day import effective_due_date
-from app.models.event import LoanEvent, LoanEventStatus
-from app.models.loan import InterestRateHistory
+from app.models.event import EarlyRepayment, LoanEvent, LoanEventStatus, LoanEventType
+from app.models.loan import InterestRateHistory, LoanStatus
+
+MIDTERM_LABEL = {LoanEventType.DEFERRAL: "상환유예", LoanEventType.ACCELERATION: "원금가속상환",
+                 LoanEventType.REFINANCING: "대환대출"}
 from app.models.payment import ActualPayment, PaymentStatus
 from app.models.organization import User
 from app.models.reference import Code
@@ -55,11 +58,25 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
     codes = {c.id: c.label for c in db.execute(select(Code)).scalars()}
 
     midterm_ids, rate_hist_count = set(), {}
+    midterm_labels: dict = defaultdict(list)   # 차입금별 적용 중인 중도변수 이름(예: 조기상환(전액))
+    full_repaid: set = set()                   # 전액 조기상환 → 상태 '종료'
     if loan_ids:
-        midterm_ids = set(db.execute(
-            select(LoanEvent.loan_id).where(LoanEvent.loan_id.in_(loan_ids), LoanEvent.status == LoanEventStatus.APPLIED,
-                                            LoanEvent.event_type.in_(MIDTERM_EVENT_TYPES))
-        ).scalars())
+        for loan_id, etype, repay_type in db.execute(
+            select(LoanEvent.loan_id, LoanEvent.event_type, EarlyRepayment.repay_type)
+            .outerjoin(EarlyRepayment, EarlyRepayment.loan_event_id == LoanEvent.id)
+            .where(LoanEvent.loan_id.in_(loan_ids), LoanEvent.status == LoanEventStatus.APPLIED,
+                   LoanEvent.event_type.in_(MIDTERM_EVENT_TYPES))
+            .order_by(LoanEvent.event_date, LoanEvent.created_at)
+        ).all():
+            midterm_ids.add(loan_id)
+            if etype == LoanEventType.EARLY_REPAYMENT:
+                label = "조기상환(전액)" if repay_type == "FULL" else "조기상환(일부)"
+                if repay_type == "FULL":
+                    full_repaid.add(loan_id)
+            else:
+                label = MIDTERM_LABEL.get(etype, etype.value)
+            if label not in midterm_labels[loan_id]:
+                midterm_labels[loan_id].append(label)
         rate_hist_count = dict(db.execute(
             select(InterestRateHistory.loan_id, func.count(InterestRateHistory.id))
             .where(InterestRateHistory.loan_id.in_(loan_ids), InterestRateHistory.is_deleted.is_(False))
@@ -132,13 +149,15 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
             "dormitory_id": dorm.id, "dormitory_name": dorm.dormitory_name, "school_name": dorm.school_name,
             "fund": fund.fund_name, "rate_type": loan.rate_type.value, "current_rate": current_rate,
             "repay_method": codes.get(loan.repay_method_code_id), "repay_cycle": codes.get(loan.repay_cycle_code_id),
-            "status": loan.status.value, "assigned_amount": loan.assigned_amount, "remaining_principal": remaining,
+            "status": (LoanStatus.CLOSED.value if loan.status == LoanStatus.ACTIVE and loan.id in full_repaid
+                       else loan.status.value), "assigned_amount": loan.assigned_amount, "remaining_principal": remaining,
             "next_due_date": next_due[0] if next_due else None,
             "next_payment_deadline": effective_due_date(next_due[0], holidays) if next_due else None,
             "next_due_total": next_due[1]["total"] if next_due else None,
             "schedule_version_no": version.version_no if version else None,
             "schedule_status": version.status.value if version else "NO_SCHEDULE",
             "has_midterm_event": loan.id in midterm_ids,
+            "midterm_labels": midterm_labels.get(loan.id, []),
             "has_rate_change": rate_hist_count.get(loan.id, 0) >= 2,
             # Phase 21: 차입금 관리 목록용
             "project_type": dorm.project_type, "grace_start_date": loan.grace_start_date, "grace_end_date": loan.grace_end_date,

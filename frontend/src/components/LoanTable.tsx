@@ -23,7 +23,7 @@ export function downloadCsv(rows: LoanRow[], asOf: string) {
     r.current_rate ?? "", r.repay_method ?? "", r.repay_cycle ?? "", STATUS[r.status], r.assigned_amount, r.remaining_principal,
     r.next_due_date ?? "", r.next_payment_deadline ?? "", r.next_due_total ?? "", r.schedule_version_no ?? "",
     r.schedule_status === "NORMAL" ? "정상" : r.schedule_status === "NEEDS_REVIEW" ? "검토 필요" : "미생성",
-    r.has_midterm_event ? "있음" : "", r.has_rate_change ? "있음" : ""].map(esc).join(","));
+    (r.midterm_labels ?? []).join(" · ") || (r.has_midterm_event ? "있음" : ""), r.has_rate_change ? "있음" : ""].map(esc).join(","));
   // BOM을 붙여야 엑셀에서 한글이 깨지지 않는다
   const blob = new Blob(["﻿" + [head.join(","), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
@@ -102,7 +102,7 @@ export function LoanTable({ rows, asOf, canDownload, title = "차입금 현황" 
                     <span className="rounded border border-line px-1.5">{STATUS[r.status]}</span>
                     {r.schedule_status === "NEEDS_REVIEW" && <span className="rounded border border-critical text-critical-ink px-1.5">⚠ 검토 필요</span>}
                     {r.schedule_status === "NO_SCHEDULE" && <span className="rounded border border-warning text-warning-ink px-1.5">테이블 미생성</span>}
-                    {r.has_midterm_event && <span className="rounded bg-surface-2 px-1.5">중도변수</span>}
+                    {(r.midterm_labels?.length ? r.midterm_labels : r.has_midterm_event ? ["중도변수"] : []).map((t) => <span key={t} className="rounded bg-surface-2 px-1.5 whitespace-nowrap">{t}</span>)}
                     {r.has_rate_change && <span className="rounded bg-surface-2 px-1.5">금리변동</span>}
                     {r.schedule_version_no && r.schedule_version_no > 1 && <span className="rounded bg-surface-2 px-1.5">V{r.schedule_version_no}</span>}
                   </div>

@@ -97,6 +97,9 @@ def get_loan(
         if dormitory is None or dormitory.spc_id != current_user.spc_id:
             raise HTTPException(status_code=403, detail="해당 차입금에 대한 접근 권한이 없습니다.")
 
+    # 전액 조기상환이 적용돼 있으면 화면 상태는 '종료'(이벤트 취소·삭제 시 자동으로 진행중)
+    from app.domain.loan_filters import full_repaid_exists
+    loan.closed_by_full_repayment = bool(db.execute(select(full_repaid_exists()).where(Loan.id == loan.id)).scalar())
     return loan
 
 

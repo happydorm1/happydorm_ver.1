@@ -142,7 +142,7 @@ export function LoansPage({ me, asOf }: { me: Me | null; asOf: string }) {
                         </button></td>
                       <td className="px-2 py-2 min-w-[96px]"><div className="flex flex-wrap gap-1 text-[11px] whitespace-nowrap">
                         <span className="rounded border border-line px-1.5">{STATUS[r.status]}</span>
-                        {r.has_midterm_event && <span className="rounded bg-surface-2 px-1.5">중도변수</span>}
+                        {(r.midterm_labels?.length ? r.midterm_labels : r.has_midterm_event ? ["중도변수"] : []).map((t) => <span key={t} className="rounded bg-surface-2 px-1.5 whitespace-nowrap">{t}</span>)}
                         {r.has_rate_change && <span className="rounded bg-surface-2 px-1.5">금리변동</span>}</div></td>
                       {writable && <td className="px-2 py-2 text-right"><Button size="sm" variant="danger" className="whitespace-nowrap" onClick={() => setDel(r)}>삭제</Button></td>}
                     </tr>);

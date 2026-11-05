@@ -31,7 +31,7 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
   if (!loan) return <Loading />;
   const dorm = ref?.dormitories.find((d) => d.id === loan.dormitory_id);
   const fund = ref?.funds.find((f) => f.id === loan.fund_id);
-  const st = LOAN_STATUS[loan.status];
+  const st = loanStatus(loan);
   const activeRates = loan.rate_history.filter((r) => !r.is_deleted);
   const setTab = (t: Tab) => go(`loans/${id}`, { tab: t });
   const writable = canWrite(me);
@@ -68,6 +68,12 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
   );
 }
 
+/** 화면 상태 — 전액 조기상환이 적용돼 있으면 '종료(조기상환 전액)' */
+function loanStatus(loan: Loan) {
+  return loan.closed_by_full_repayment && loan.status === "ACTIVE"
+    ? { label: "종료(조기상환 전액)", tone: "neutral" as const } : LOAN_STATUS[loan.status];
+}
+
 function InfoTab({ loan, writable, onSaved }: { loan: Loan; writable: boolean; onSaved: (m: string) => void }) {
   const ref = useRefData();
   const { data: hasSchedule } = useAsync<boolean>(() => api.schedule(loan.id).then(() => true, () => false), [loan.id]);
@@ -82,7 +88,7 @@ function InfoTab({ loan, writable, onSaved }: { loan: Loan; writable: boolean; o
     ["원금상환시작일", loan.principal_repay_start_date],
     ["상환기간", `${loan.repay_period_months}개월 (${Math.floor(loan.repay_period_months / 12)}년${loan.repay_period_months % 12 ? ` ${loan.repay_period_months % 12}개월` : ""})`],
     ["상환주기", code(loan.repay_cycle_code_id, ref?.cycles)], ["상환유형", code(loan.repay_method_code_id, ref?.methods)],
-    ["이자 끝수처리", ({ ROUND: "반올림(원 미만)", ROUNDDOWN: "절사(원 미만)", ROUNDDOWN10: "절사(일의 자리)" } as const)[loan.interest_rounding] ?? loan.interest_rounding], ["상태", LOAN_STATUS[loan.status].label],
+    ["이자 끝수처리", ({ ROUND: "반올림(원 미만)", ROUNDDOWN: "절사(원 미만)", ROUNDDOWN10: "절사(일의 자리)" } as const)[loan.interest_rounding] ?? loan.interest_rounding], ["상태", loanStatus(loan).label],
     ["등록일시", fmtDateTime(loan.created_at)],
   ];
   return (

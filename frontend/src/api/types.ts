@@ -33,7 +33,7 @@ export interface LoanRow {
   assigned_amount: number; remaining_principal: number;
   next_due_date: string | null; next_payment_deadline: string | null; next_due_total: number | null;
   schedule_version_no: number | null; schedule_status: "NORMAL" | "NEEDS_REVIEW" | "NO_SCHEDULE";
-  has_midterm_event: boolean; has_rate_change: boolean;
+  has_midterm_event: boolean; midterm_labels?: string[]; has_rate_change: boolean;
   // Phase 21: 차입금 관리 목록
   project_type?: string | null; grace_start_date?: string | null; grace_end_date?: string | null;
   principal_repay_start_date?: string; repay_period_months?: number; maturity_date?: string | null;
@@ -137,7 +137,7 @@ export interface LoanBase {
 }
 export interface LoanCreate extends LoanBase { initial_rate: RateInput }
 export interface Loan extends LoanBase {
-  id: Id; status: "ACTIVE" | "CLOSED" | "REFINANCED_OUT"; created_at: string; rate_history: RateHistory[];
+  id: Id; status: "ACTIVE" | "CLOSED" | "REFINANCED_OUT"; closed_by_full_repayment?: boolean; created_at: string; rate_history: RateHistory[];
 }
 export interface ScheduleRow {
   id: Id; seq_no: number; due_date: string; interest_calc_start: string; interest_calc_end: string; days: number;

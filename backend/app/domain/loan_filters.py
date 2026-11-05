@@ -11,10 +11,10 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import Select, exists, func, select
+from sqlalchemy import Select, and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.event import LoanEvent, LoanEventStatus, LoanEventType
+from app.models.event import EarlyRepayment, LoanEvent, LoanEventStatus, LoanEventType
 from app.models.loan import InterestRateHistory, Loan, LoanStatus, RateType
 from app.models.organization import Dormitory, User, UserRole
 from app.models.reference import Fund
@@ -62,6 +62,31 @@ def _midterm_event_exists():
     )
 
 
+def full_repaid_exists():
+    """적용 중인 '전액' 조기상환 이벤트가 있는 차입금 — 상태는 '종료'로 본다(이벤트를 취소·삭제하면 다시 진행중)."""
+    return exists().where(
+        LoanEvent.loan_id == Loan.id,
+        LoanEvent.status == LoanEventStatus.APPLIED,
+        LoanEvent.event_type == LoanEventType.EARLY_REPAYMENT,
+        EarlyRepayment.loan_event_id == LoanEvent.id,
+        EarlyRepayment.repay_type == "FULL",
+    )
+
+
+def status_condition(statuses: list[LoanStatus]):
+    """상태 조건(실제 상태 기준) — 전액 조기상환된 차입금은 저장값이 ACTIVE여도 '종료'로 취급."""
+    full = full_repaid_exists()
+    conds = []
+    for s in statuses:
+        if s == LoanStatus.ACTIVE:
+            conds.append(and_(Loan.status == LoanStatus.ACTIVE, ~full))
+        elif s == LoanStatus.CLOSED:
+            conds.append(or_(Loan.status == LoanStatus.CLOSED, and_(Loan.status == LoanStatus.ACTIVE, full)))
+        else:
+            conds.append(Loan.status == s)
+    return or_(*conds)
+
+
 def loan_query(user: User, f: LoanFilters) -> Select:
     stmt = (
         select(Loan, Dormitory, Fund)
@@ -89,7 +114,7 @@ def loan_query(user: User, f: LoanFilters) -> Select:
     if f.repay_cycle_code_id:
         stmt = stmt.where(Loan.repay_cycle_code_id == f.repay_cycle_code_id)
     if f.statuses:
-        stmt = stmt.where(Loan.status.in_(f.statuses))
+        stmt = stmt.where(status_condition(f.statuses))
     if f.has_rate_change is not None:
         cond = _rate_change_exists()
         stmt = stmt.where(cond if f.has_rate_change else ~cond)

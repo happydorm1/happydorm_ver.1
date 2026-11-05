@@ -78,5 +78,6 @@ class LoanRead(LoanBase):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     status: LoanStatus
+    closed_by_full_repayment: bool = False   # 전액 조기상환 적용 중 → 화면 상태 '종료'
     created_at: datetime
     rate_history: list[InterestRateHistoryRead] = []
