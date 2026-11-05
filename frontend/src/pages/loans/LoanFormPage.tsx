@@ -33,6 +33,9 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
     grace_type_code_id: "", grace_start: "", grace_end: "", principal_start: "", principal_end: "", months: "", cycle: "", method: "",
     rounding: "ROUND" as "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10",
   });
+  // 거치기간 중 원금상환(사원총회 협의로 건설 사업비 잔여액 등 상환) — 거치기간 이자 납입일에 원금을 함께 갚음
+  const [gp, setGp] = useState<{ due_date: string; amount: number | null }[]>([]);
+  const gpTotal = gp.reduce((a, x) => a + (x.amount ?? 0), 0);
   const [codeTouched, setCodeTouched] = useState(false);
   const [generate, setGenerate] = useState(true);
   const [dormOpen, setDormOpen] = useState(false);
@@ -88,8 +91,10 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
     if (!ppy || !m) return null;
     const n = Math.round((m * ppy) / 12);
     const per = method?.code === "EQUAL_PRINCIPAL" && f.assigned_amount ? Math.round(f.assigned_amount / n) : null;
-    return { n, per, last: addMonths(f.principal_start, Math.round(12 / ppy) * (n - 1)), years: `${Math.floor(m / 12)}년${m % 12 ? ` ${m % 12}개월` : ""}` };
-  }, [cycle, method, f.months, f.assigned_amount, f.principal_start]);
+    // 거치 중 원금상환이 있으면 회차당 원금은 그대로, 남은 잔액이 먼저 끝나 실제 회차가 줄어든다(원금균등)
+    const nEff = per && gpTotal > 0 && f.assigned_amount ? Math.min(n, Math.ceil((f.assigned_amount - gpTotal) / per)) : n;
+    return { n, nEff, per, last: addMonths(f.principal_start, Math.round(12 / ppy) * (nEff - 1)), years: `${Math.floor(m / 12)}년${m % 12 ? ` ${m % 12}개월` : ""}` };
+  }, [cycle, method, f.months, f.assigned_amount, f.principal_start, gpTotal]);
 
   function validate(): Errors {
     const e: Errors = {};
@@ -102,6 +107,13 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
     if (f.rate_end && f.rate_end <= (f.rate_start || f.assigned_date)) e.rate_end = "적용종료일은 적용시작일보다 뒤여야 합니다.";
     if (Boolean(f.grace_start) !== Boolean(f.grace_end)) e.grace_end = "거치 시작·종료일을 함께 입력하거나 둘 다 비우세요.";
     if (f.grace_start && f.grace_end && f.grace_end < f.grace_start) e.grace_end = "거치종료일이 거치시작일보다 빠릅니다.";
+    gp.forEach((x, i) => {
+      if (!x.due_date || !x.amount) e[`gp${i}`] = "상환일과 금액을 모두 넣으세요.";
+      else if (!f.grace_start || !f.grace_end) e[`gp${i}`] = "거치기간(시작·종료일)을 먼저 넣으세요.";
+      else if (x.due_date <= f.grace_start || x.due_date > f.grace_end) e[`gp${i}`] = "거치기간 안의 날짜여야 합니다.";
+      else if (gp.findIndex((y) => y.due_date === x.due_date) !== i) e[`gp${i}`] = "같은 날짜가 두 번 있습니다.";
+    });
+    if (gp.length && f.assigned_amount && gpTotal >= f.assigned_amount) e.gp_total = "거치 중 원금상환 합계는 배정금액보다 작아야 합니다.";
     if (!f.principal_start) e.principal_start = "원금상환시작일을 입력하세요.";
     else if (f.assigned_date && f.principal_start <= f.assigned_date) e.principal_start = "배정일 이후여야 합니다.";
     else if (f.grace_end && f.principal_start <= f.grace_end) e.principal_start = "거치종료일 이후여야 합니다.";
@@ -121,6 +133,7 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
       assigned_date: f.assigned_date, rate_type: f.rate_type, repay_cycle_code_id: f.cycle, repay_method_code_id: f.method,
       grace_type_code_id: f.grace_type_code_id || null, grace_start_date: f.grace_start || null, grace_end_date: f.grace_end || null,
       principal_repay_start_date: f.principal_start, repay_period_months: Number(f.months), interest_rounding: f.rounding,
+      grace_principal_payments: gp.filter((x) => x.due_date && x.amount).map((x) => ({ due_date: x.due_date, amount: x.amount! })),
       initial_rate: { effective_start_date: f.rate_start || f.assigned_date, effective_end_date: f.rate_end || null, annual_rate: f.rate,
         rate_table_name: f.rate_table_name || null, rate_basis: f.rate_basis || null },
     };
@@ -217,6 +230,38 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
                 <input type="date" className={inputCls} aria-invalid={inv("grace_end")} value={f.grace_end} onChange={(e) => set("grace_end")(e.target.value)} />
               </Field>
             </div>
+            <section aria-label="거치기간 중 원금상환" className="mt-4 border-t border-line pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold">거치기간 중 원금상환 <span className="font-normal text-ink-3">(선택)</span></h3>
+                  <p className="text-xs text-ink-2">사원총회 협의로 건설 사업비 잔여액 등을 거치기간 중에 갚는 경우 — 거치기간의 이자 납입일(월말)과 원금을 넣습니다.
+                    그날 이후 이자는 줄어든 잔액으로 계산되고, 상환기간 회차당 원금은 그대로라 만기가 앞당겨질 수 있습니다.</p>
+                </div>
+                <Button size="sm" type="button" disabled={!f.grace_start || !f.grace_end}
+                  onClick={() => setGp((g) => [...g, { due_date: "", amount: null }])}>+ 원금상환 추가</Button>
+              </div>
+              {!f.grace_start && <p className="mt-2 text-xs text-ink-3">거치시작일·종료일을 넣으면 추가할 수 있습니다.</p>}
+              {gp.length > 0 && <ul className="mt-3 space-y-2">
+                {gp.map((x, i) => (
+                  <li key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-start">
+                    <Field label={`상환일 ${i + 1}`} error={errors[`gp${i}`]}>
+                      <input type="date" className={inputCls} aria-invalid={Boolean(errors[`gp${i}`])} value={x.due_date}
+                        min={f.grace_start || undefined} max={f.grace_end || undefined}
+                        onChange={(e) => { const v = e.target.value; setGp((g) => g.map((y, j) => j === i ? { ...y, due_date: v } : y));
+                          setErrors((er) => { const n = { ...er }; delete n[`gp${i}`]; delete n.gp_total; return n; }); }} />
+                    </Field>
+                    <Field label={`원금상환액 ${i + 1}`} hint={moneyHint(x.amount)}>
+                      <MoneyInput aria-label={`원금상환액 ${i + 1}`} value={x.amount}
+                        onChange={(v) => setGp((g) => g.map((y, j) => j === i ? { ...y, amount: v } : y))} />
+                    </Field>
+                    <Button size="sm" type="button" className="sm:mt-6" aria-label={`원금상환 ${i + 1} 삭제`}
+                      onClick={() => setGp((g) => g.filter((_, j) => j !== i))}>삭제</Button>
+                  </li>
+                ))}
+              </ul>}
+              {gp.length > 0 && <p className="mt-2 text-xs text-ink-2">합계 {won(gpTotal)}{f.assigned_amount ? ` · 거치 후 잔액 ${won(f.assigned_amount - gpTotal)}` : ""}</p>}
+              {errors.gp_total && <p className="mt-1 text-xs text-critical-ink" role="alert">{errors.gp_total}</p>}
+            </section>
           </Card>
 
           <Card title="4. 상환조건">
@@ -266,6 +311,8 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
                 <dt className="text-ink-2">배정금액</dt><dd className="text-right tabular">{won(f.assigned_amount)}</dd>
                 <dt className="text-ink-2">상환기간</dt><dd className="text-right">{summary.years}</dd>
                 <dt className="text-ink-2">총 상환횟수</dt><dd className="text-right tabular">{summary.n}회 ({cycle?.label})</dd>
+                {gpTotal > 0 && <><dt className="text-ink-2">거치 중 원금상환</dt><dd className="text-right tabular">{won(gpTotal)} ({gp.length}건)</dd></>}
+                {gpTotal > 0 && summary.nEff < summary.n && <><dt className="text-ink-2">실제 상환횟수</dt><dd className="text-right tabular">약 {summary.nEff}회(잔액 소진)</dd></>}
                 {summary.per && <><dt className="text-ink-2">회차당 원금</dt><dd className="text-right tabular">약 {won(summary.per)}</dd></>}
                 {f.principal_start && <><dt className="text-ink-2">마지막 상환일</dt><dd className="text-right tabular">약 {summary.last}</dd></>}
               </dl>

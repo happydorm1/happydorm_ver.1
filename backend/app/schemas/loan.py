@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.loan import LoanStatus, RateType
 
@@ -30,6 +30,27 @@ class InterestRateHistoryRead(InterestRateHistoryBase):
 
 
 # ---------- Loan ----------
+class GracePrincipalPayment(BaseModel):
+    """거치기간 중 원금상환 1건 — 거치기간의 이자 납입일(상환예정일)에 원금을 함께 갚는다."""
+    due_date: date
+    amount: int = Field(..., gt=0)
+
+
+def check_grace_payments(payments, grace_start, grace_end, assigned_amount) -> None:
+    if not payments:
+        return
+    if not (grace_start and grace_end):
+        raise ValueError("거치기간 중 원금상환은 거치기간(시작·종료일)을 넣어야 입력할 수 있습니다.")
+    dates = [p.due_date for p in payments]
+    if len(set(dates)) != len(dates):
+        raise ValueError("거치기간 중 원금상환에 같은 날짜가 두 번 있습니다.")
+    for d in dates:
+        if not (grace_start < d <= grace_end):
+            raise ValueError(f"거치기간 중 원금상환일 {d}이(가) 거치기간({grace_start} ~ {grace_end}) 밖입니다.")
+    if assigned_amount is not None and sum(p.amount for p in payments) >= assigned_amount:
+        raise ValueError("거치기간 중 원금상환 합계가 배정금액보다 작아야 합니다.")
+
+
 class LoanBase(BaseModel):
     dormitory_id: uuid.UUID
     fund_id: uuid.UUID
@@ -45,6 +66,12 @@ class LoanBase(BaseModel):
     principal_repay_start_date: date
     repay_period_months: int = Field(..., gt=0)
     interest_rounding: Literal["ROUND", "ROUNDDOWN", "ROUNDDOWN10"] = "ROUND"
+    grace_principal_payments: list[GracePrincipalPayment] = []
+
+    @field_validator("grace_principal_payments", mode="before")
+    @classmethod
+    def _none_to_list(cls, v):
+        return v or []
 
     @model_validator(mode="after")
     def check_grace_dates(self):
@@ -56,6 +83,8 @@ class LoanBase(BaseModel):
             and self.grace_start_date > self.grace_end_date
         ):
             raise ValueError("거치종료일은 거치시작일보다 빠를 수 없습니다.")
+        check_grace_payments(sorted(self.grace_principal_payments, key=lambda p: p.due_date),
+                             self.grace_start_date, self.grace_end_date, self.assigned_amount)
         return self
 
 
@@ -70,6 +99,7 @@ class LoanUpdate(BaseModel):
     grace_end_date: date | None = None
     principal_repay_start_date: date | None = None
     repay_period_months: int | None = None
+    grace_principal_payments: list[GracePrincipalPayment] | None = None
     status: LoanStatus | None = None
     change_reason: str | None = Field(default=None, max_length=500, description="변경사유(변경이력에 기록)")
 

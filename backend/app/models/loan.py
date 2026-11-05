@@ -7,7 +7,7 @@ import uuid
 from datetime import date
 
 from sqlalchemy import BigInteger, Date, Enum, ForeignKey, Numeric, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import AuditMixin, Base
@@ -49,6 +49,9 @@ class Loan(Base, AuditMixin):
     grace_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     grace_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     principal_repay_start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # 거치기간 중 원금상환(사원총회 협의로 건설 사업비 잔여액 등을 상환) — [{"due_date": "YYYY-MM-DD", "amount": 원}]
+    # 거치기간의 이자 납입일에 원금을 함께 갚고, 이후 이자는 줄어든 잔액으로 계산한다.
+    grace_principal_payments: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     repay_period_months: Mapped[int] = mapped_column(nullable=False)
 
     # 이자 원단위 처리: ROUND(반올림, 기본) / ROUNDDOWN(절사 — 구 차입금 일부, 첨부6에서 확인)

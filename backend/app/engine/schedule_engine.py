@@ -140,41 +140,60 @@ def generate_grace_period_rows(
     months_per_period: int,
     rate_lookup: RateLookup,
     rounding: str = "ROUND",
+    balance_start: int | None = None,
+    principal_payments: dict[datetime.date, int] | None = None,
 ) -> list[ScheduleRow]:
     """
     거치기간: 원금상환 없이 이자만 발생(10~11번 요구사항).
+    거치기간 중 원금상환(principal_payments: 상환예정일 → 원금)이 있으면 그 납입일에 원금을 함께 갚고,
+    이후 이자는 줄어든 잔액으로 계산한다(2017-03-31_공자 수작업 테이블 J20·J22 확인).
+    balance_start: 거치기간 중간부터 다시 계산할 때(금리변동 등)의 시작 잔액 — 비우면 배정금액.
     PPMT/IPMT는 '회차 수'가 확정되어야 계산 가능하므로, 거치기간에는 재원과 무관하게
     단리방식으로 계산한다(1단계에서 실데이터로 확인된 전제).
     """
     rows: list[ScheduleRow] = []
     period_start = start_date
     due_date = first_anchor_due_date(start_date, months_per_period)
+    balance = assigned_amount if balance_start is None else balance_start
+    payments = {d: a for d, a in (principal_payments or {}).items() if d > start_date}
+    used: set[datetime.date] = set()
 
     while due_date <= grace_end_date:
         subperiods = split_at_year_end(period_start, due_date)
-        interests = _subperiod_interests(assigned_amount, subperiods, rate_lookup, rounding)
+        interests = _subperiod_interests(balance, subperiods, rate_lookup, rounding)
+        principal = payments.get(due_date, 0)
+        if principal:
+            used.add(due_date)
+            if principal >= balance:
+                raise ValueError(f"거치기간 중 원금상환({due_date}, {principal:,}원)이 남은 원금({balance:,}원) 이상입니다.")
         for idx, (s, e) in enumerate(subperiods):
             is_real = idx == len(subperiods) - 1
             days = days_between(s, e)
             rate = rate_lookup(e)
             interest = interests[idx]
+            p = principal if is_real else 0
             rows.append(
                 ScheduleRow(
                     due_date=due_date,
                     interest_calc_start=s,
                     interest_calc_end=e,
                     days=days,
-                    balance_before=assigned_amount,
-                    principal_amount=0,
+                    balance_before=balance,
+                    principal_amount=p,
                     interest_amount=interest,
-                    balance_after=assigned_amount,
+                    balance_after=balance - p,
                     applied_rate=rate,
                     row_type="YEAR_END_SPLIT_REAL" if len(subperiods) > 1 else "GRACE",
-                    remark="거치기간",
+                    remark="거치기간 · 원금상환" if p else "거치기간",
                 )
             )
+        balance -= principal
         period_start = due_date
         due_date = add_months_eom(due_date, months_per_period)
+    missing = sorted(set(payments) - used)
+    if missing:
+        raise ValueError("거치기간 중 원금상환일이 이자 납입일(상환예정일)과 맞지 않습니다: "
+                         + ", ".join(str(d) for d in missing) + " — 거치기간의 상환예정일(월말)로 넣으세요.")
     return rows
 
 
@@ -206,9 +225,11 @@ def generate_equal_principal_schedule(
     due_date = first_due_date
     installment_no = start_installment_no
 
-    while installment_no < total_installments:
+    while installment_no < total_installments and balance > 0:
         installment_no += 1
-        is_last = installment_no == total_installments
+        # 회차당 원금은 원래 배정금액 기준으로 고정. 거치기간 중 원금상환 등으로 잔액이 먼저 바닥나면
+        # 그 회차에 남은 잔액만 갚고 종료한다(2017-03-31_공자: 2043-11-30 879,226원으로 조기 종료).
+        is_last = installment_no == total_installments or balance <= principal_per_installment
         principal = balance if is_last else principal_per_installment
 
         subperiods = split_at_year_end(period_start, due_date)

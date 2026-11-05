@@ -24,7 +24,16 @@ from app.schemas.loan import (
 router = APIRouter(prefix="/loans", tags=["차입금"])
 
 WRITE_ROLES = (UserRole.SYSTEM_ADMIN, UserRole.FOUNDATION_FUND_MANAGER)
-CONTRACT_FIELDS = {"assigned_amount", "grace_start_date", "grace_end_date", "principal_repay_start_date", "repay_period_months"}
+CONTRACT_FIELDS = {"assigned_amount", "grace_start_date", "grace_end_date", "principal_repay_start_date", "repay_period_months",
+                   "grace_principal_payments"}
+
+
+def grace_payments_json(payments) -> list | None:
+    """거치기간 중 원금상환 → DB(JSON) 저장 형식. 날짜순, 없으면 None."""
+    if not payments:
+        return None
+    items = [p if isinstance(p, dict) else p.model_dump() for p in payments]
+    return [{"due_date": str(p["due_date"]), "amount": int(p["amount"])} for p in sorted(items, key=lambda p: str(p["due_date"]))]
 
 
 def _loan_query():
@@ -67,6 +76,7 @@ def create_loan(
         raise HTTPException(status_code=409, detail="이미 등록된 차입금 코드입니다.")
 
     data = payload.model_dump(exclude={"initial_rate"})
+    data["grace_principal_payments"] = grace_payments_json(payload.grace_principal_payments)
     loan = Loan(**data, created_by=current_user.id)
     db.add(loan)
     db.flush()  # loan.id 확보
@@ -115,6 +125,15 @@ def update_loan(
         raise HTTPException(status_code=404, detail="차입금을 찾을 수 없습니다.")
 
     changes = payload.model_dump(exclude_unset=True, exclude={"change_reason"})
+    if "grace_principal_payments" in changes:
+        from app.schemas.loan import GracePrincipalPayment, check_grace_payments
+        gp = [GracePrincipalPayment(**p) for p in (changes["grace_principal_payments"] or [])]
+        try:
+            check_grace_payments(sorted(gp, key=lambda p: p.due_date), changes.get("grace_start_date", loan.grace_start_date),
+                                 changes.get("grace_end_date", loan.grace_end_date), changes.get("assigned_amount", loan.assigned_amount))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        changes["grace_principal_payments"] = grace_payments_json(gp)
     contract_fields = set(changes) & CONTRACT_FIELDS
     if contract_fields:
         # §50: 기존 데이터를 임의로 덮어쓰지 않는다 — 원리금 테이블이 이미 있으면 계약조건은 이벤트로만 변경

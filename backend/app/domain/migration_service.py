@@ -47,6 +47,8 @@ SHEETS = {
     "금리이력": [("차입금코드*", "변동금리 등 최초금리 이후 바뀐 금리만"), ("적용시작일*", "YYYY-MM-DD"), ("연금리(%)*", "예) 2.98")],
     "납부예외": [("차입금코드*", "기준일 이전 회차 중 예정대로 납부되지 않은 회차"), ("상환예정일*", "원리금 테이블의 상환예정일"),
              ("실제납부 원금(원)*", "미납이면 0"), ("실제납부 이자(원)*", "미납이면 0"), ("실제납부일", "비우면 상환예정일")],
+    "거치중원금상환": [("차입금코드*", "거치기간 중 원금을 갚은(갚을) 차입금"), ("상환예정일*", "거치기간의 이자 납입일(월말) — 예) 2018-11-30"),
+                ("원금상환액(원)*", "그날 갚는 원금 — 이후 이자는 줄어든 잔액으로 계산")],
 }
 GUIDE = [
     "기존 차입금 일괄 이관 양식",
@@ -57,6 +59,8 @@ GUIDE = [
     "4. 금리이력: 최초금리 이후에 바뀐 금리만 적습니다. 원리금 테이블은 이 이력을 모두 반영해 처음부터 만들어집니다.",
     "5. 납부: 화면에서 '이관 기준일'과 '기준일 이전 회차 납부완료 처리'를 고르면, 기준일까지의 회차는 예정액대로 납부된 것으로 기록됩니다.",
     "   예정대로 내지 않은 회차만 '납부예외' 시트에 적습니다(미납이면 원금·이자 0, 일부납부면 실제 금액).",
+    "5-1. 거치기간 중 원금상환(사원총회 협의로 건설 사업비 잔여액 상환 등)은 '거치중원금상환' 시트에 적습니다.",
+    "   거치기간의 이자 납입일(상환예정일)에 원금을 함께 갚고, 상환기간 회차당 원금은 그대로라 잔액이 먼저 끝나면 만기가 앞당겨집니다.",
     "6. 상환유예·조기상환·가속상환·대환은 일괄 대상이 아닙니다. 이관 뒤 '이벤트 관리'에서 발생 순서대로 등록하세요.",
     "7. 화면에서 '검사'를 누르면 실제로 등록·계산까지 해 본 뒤 되돌립니다. 오류가 없을 때만 '이관 실행'이 됩니다(전부 반영 또는 전혀 반영 안 함).",
     "8. 이관 후 '이관 대조표'를 내려받아 기존 엑셀의 잔여원금·다음 상환액과 맞춰 보세요.",
@@ -371,7 +375,28 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             issues.err("납부예외", r, "상환예정일", "같은 차입금·상환예정일이 두 번 적혀 있습니다.")
             continue
         excepts.append(item)
-    return {"dorms": dorms, "loans": loans, "rates": rates, "excepts": excepts}
+
+    grace_pay = []
+    for r, v in _rows(wb, "거치중원금상환", issues):
+        if not _need(issues, "거치중원금상환", r, v, "차입금코드", "상환예정일", "원금상환액(원)"):
+            continue
+        code = _text(v["차입금코드"])
+        if code not in loan_codes:
+            issues.err("거치중원금상환", r, "차입금코드", f"'차입금' 시트에 없는 차입금코드입니다: {code}")
+            continue
+        try:
+            item = {"row": r, "code": code, "due": _date(v["상환예정일"]), "amount": _int(v["원금상환액(원)"])}
+        except ValueError as e:
+            issues.err("거치중원금상환", r, None, str(e))
+            continue
+        if not item["amount"] or item["amount"] <= 0:
+            issues.err("거치중원금상환", r, "원금상환액(원)", "0보다 큰 금액을 적으세요.")
+            continue
+        if any(x["code"] == code and x["due"] == item["due"] for x in grace_pay):
+            issues.err("거치중원금상환", r, "상환예정일", "같은 차입금·상환예정일이 두 번 적혀 있습니다.")
+            continue
+        grace_pay.append(item)
+    return {"dorms": dorms, "loans": loans, "rates": rates, "excepts": excepts, "grace_pay": grace_pay}
 
 
 # ---------- 반영 ----------
@@ -421,6 +446,9 @@ def _run(db: Session, data: dict, *, cutoff: date, mark_paid: bool, user: User, 
     exc_by = defaultdict(dict)
     for x in data["excepts"]:
         exc_by[x["code"]][x["due"]] = x
+    grace_by = defaultdict(list)
+    for x in data.get("grace_pay", []):
+        grace_by[x["code"]].append(x)
     for it in data["loans"]:
         cands = [d for (n, sc), d in dorm_by.items() if n == it["dorm"] and (it["school"] is None or sc == it["school"])]
         if not cands:
@@ -434,6 +462,17 @@ def _run(db: Session, data: dict, *, cutoff: date, mark_paid: bool, user: User, 
                     repay_method_code_id=it["method"].id, grace_type_code_id=it["grace"].id if it["grace"] else None,
                     grace_start_date=it["gs"], grace_end_date=it["ge"], principal_repay_start_date=it["first"],
                     repay_period_months=it["months"], interest_rounding=it["rounding"], created_by=user.id)
+        gp = sorted(grace_by.get(it["code"], []), key=lambda x: x["due"])
+        if gp:
+            from app.schemas.loan import GracePrincipalPayment, check_grace_payments
+            try:
+                check_grace_payments([GracePrincipalPayment(due_date=x["due"], amount=x["amount"]) for x in gp],
+                                     it["gs"], it["ge"], it["amount"])
+            except ValueError as e:
+                issues.err("거치중원금상환", gp[0]["row"], None, f"{it['code']}: {e}")
+                continue
+            loan.grace_principal_payments = [{"due_date": x["due"].isoformat(), "amount": x["amount"]} for x in gp]
+            stats["grace_payments"] = stats.get("grace_payments", 0) + len(gp)
         db.add(loan)
         db.flush()
         hist = [{"start": it["rate_start"], "rate": it["rate"], "row": it["row"], "sheet": "차입금"}]

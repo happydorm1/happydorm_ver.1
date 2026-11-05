@@ -229,3 +229,35 @@ def test_end_date_instead_of_months():
     assert r["applied"] is True
     loan = _find_loan(h, f"M-{run}-D")
     assert client.get(f"/api/v1/loans/{loan['id']}", headers=h).json()["repay_period_months"] == 60
+
+
+def test_grace_principal_payment_sheet():
+    """거치중원금상환 시트 → 차입금의 거치기간 중 원금상환으로 등록, 원리금 테이블에 반영."""
+    h = admin_headers()
+    run = uuid.uuid4().hex[:6]
+    _, dorm_id, _ = make_loan(h)
+    dorm = next(d for d in client.get("/api/v1/dormitories", headers=h).json() if d["id"] == dorm_id)
+    row = _loan_row(dorm["dormitory_name"], f"M-{run}-G", first="2024-05-31", months=60)
+    row[10], row[11] = "2023-02-28", "2024-02-29"           # 거치 2023-02-28 ~ 2024-02-29
+    wb = _template(h)
+    assert "거치중원금상환" in wb.sheetnames
+    _put(wb["차입금"], [row])
+    _put(wb["거치중원금상환"], [[f"M-{run}-G", "2023-08-31", 10_000_000], [f"M-{run}-X", "2023-08-31", 1]])
+    buf = io.BytesIO()
+    wb.save(buf)
+    r = _send(h, buf.getvalue()).json()
+    assert [e["row"] for e in r["errors"] if e["sheet"] == "거치중원금상환"] == [3]     # 없는 차입금코드
+    wb["거치중원금상환"].delete_rows(3)
+    buf = io.BytesIO()
+    wb.save(buf)
+    r = _send(h, buf.getvalue(), "apply").json()
+    assert r["applied"] is True, r["errors"]
+    loan = _find_loan(h, f"M-{run}-G")
+    assert client.get(f"/api/v1/loans/{loan['id']}", headers=h).json()["grace_principal_payments"] == [
+        {"due_date": "2023-08-31", "amount": 10_000_000}]
+    rows = client.get(f"/api/v1/loans/{loan['id']}/schedule", headers=h).json()["rows"]
+    g = next(x for x in rows if x["due_date"] == "2023-08-31")
+    assert g["principal_amount"] == 10_000_000 and g["balance_after"] == 90_000_000
+    first = next(x for x in rows if x["installment_no"] == 1)
+    assert first["principal_amount"] == 5_000_000                   # 회차당 원금은 배정금액/20회 그대로
+    assert sum(x["principal_amount"] for x in rows) == 100_000_000 and rows[-1]["balance_after"] == 0

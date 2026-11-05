@@ -85,6 +85,7 @@ function InfoTab({ loan, writable, onSaved }: { loan: Loan; writable: boolean; o
     ["배정일", loan.assigned_date], ["배정금액", won(loan.assigned_amount)], ["금리유형", RATE_TYPE[loan.rate_type]],
     ["거치유형", code(loan.grace_type_code_id, ref?.graceTypes)],
     ["거치기간", loan.grace_start_date ? `${loan.grace_start_date} ~ ${loan.grace_end_date}` : "없음"],
+    ...(loan.grace_principal_payments?.length ? [["거치 중 원금상환", loan.grace_principal_payments.map((x) => `${x.due_date} ${won(x.amount)}`).join(" · ")] as [string, React.ReactNode]] : []),
     ["원금상환시작일", loan.principal_repay_start_date],
     ["상환기간", `${loan.repay_period_months}개월 (${Math.floor(loan.repay_period_months / 12)}년${loan.repay_period_months % 12 ? ` ${loan.repay_period_months % 12}개월` : ""})`],
     ["상환주기", code(loan.repay_cycle_code_id, ref?.cycles)], ["상환유형", code(loan.repay_method_code_id, ref?.methods)],

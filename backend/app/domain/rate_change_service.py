@@ -123,17 +123,23 @@ def apply_rate_change(
     new_rows_data: list[engine.ScheduleRow] = []
     if cutover_row.installment_no is None:
         # 아직 거치기간 — 커트오버 지점부터 거치기간 잔여분 + 원금상환 전체를 재생성
-        grace_rows = engine.generate_grace_period_rows(
-            assigned_amount=loan.assigned_amount,
-            start_date=cutover_row.interest_calc_start,
-            grace_end_date=loan.grace_end_date,
-            months_per_period=months_per_period,
-            rate_lookup=rate_lookup,
-            rounding=loan.interest_rounding,
-        )
+        from app.domain.schedule_service import grace_payments_map
+        try:
+            grace_rows = engine.generate_grace_period_rows(
+                assigned_amount=loan.assigned_amount,
+                start_date=cutover_row.interest_calc_start,
+                grace_end_date=loan.grace_end_date,
+                months_per_period=months_per_period,
+                rate_lookup=rate_lookup,
+                rounding=loan.interest_rounding,
+                balance_start=cutover_row.balance_before,          # 거치기간 중 이미 갚은 원금 반영
+                principal_payments=grace_payments_map(loan),        # 남은 거치기간 중 원금상환
+            )
+        except ValueError as e:
+            raise RateChangeError(str(e))
         new_rows_data += grace_rows
         new_rows_data += engine.generate_equal_principal_schedule(
-            balance_start=loan.assigned_amount,
+            balance_start=cutover_row.balance_before - sum(r.principal_amount for r in grace_rows),
             assigned_amount=loan.assigned_amount,
             first_due_date=loan.principal_repay_start_date,
             total_installments=total_installments,

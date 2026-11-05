@@ -20,6 +20,11 @@ from app.models.schedule import (
 )
 
 
+def grace_payments_map(loan) -> dict[date, int]:
+    """차입금의 '거치기간 중 원금상환'(JSON) → {상환예정일: 원금}."""
+    return {date.fromisoformat(p["due_date"]): int(p["amount"]) for p in (loan.grace_principal_payments or [])}
+
+
 class ScheduleGenerationError(Exception):
     pass
 
@@ -55,16 +60,20 @@ def generate_initial_schedule(
 
     rows: list[engine.ScheduleRow] = []
 
-    # 거치기간
+    # 거치기간(거치기간 중 원금상환 포함)
     if loan.grace_start_date and loan.grace_end_date:
-        grace_rows = engine.generate_grace_period_rows(
-            assigned_amount=loan.assigned_amount,
-            start_date=loan.grace_start_date,
-            grace_end_date=loan.grace_end_date,
-            months_per_period=months_per_period,
-            rate_lookup=rate_lookup,
-            rounding=loan.interest_rounding,
-        )
+        try:
+            grace_rows = engine.generate_grace_period_rows(
+                assigned_amount=loan.assigned_amount,
+                start_date=loan.grace_start_date,
+                grace_end_date=loan.grace_end_date,
+                months_per_period=months_per_period,
+                rate_lookup=rate_lookup,
+                rounding=loan.interest_rounding,
+                principal_payments=grace_payments_map(loan),
+            )
+        except ValueError as e:
+            raise ScheduleGenerationError(str(e))
         rows += grace_rows
         # 상환기간은 '마지막 거치 이자 납입일'부터 이어진다. 거치종료일이 납입일 사이(예: 12/31)에 있어도
         # 그 사이 기간이 빠지지 않게 한다(검증된 원본 사례는 거치종료일=마지막 납입일이라 결과 동일).
@@ -73,10 +82,11 @@ def generate_initial_schedule(
         period_start_date = loan.assigned_date
 
     total_installments = round(loan.repay_period_months / months_per_period)
+    balance_after_grace = loan.assigned_amount - sum(r.principal_amount for r in rows)
 
     if fund.interest_method == InterestMethod.SIMPLE or (method_code and method_code.code == "EQUAL_PRINCIPAL"):
         rows += engine.generate_equal_principal_schedule(
-            balance_start=loan.assigned_amount,
+            balance_start=balance_after_grace,
             assigned_amount=loan.assigned_amount,
             first_due_date=loan.principal_repay_start_date,
             total_installments=total_installments,
@@ -87,7 +97,7 @@ def generate_initial_schedule(
         )
     else:
         rows += engine.generate_equal_payment_schedule(
-            balance_start=loan.assigned_amount,
+            balance_start=balance_after_grace,   # 거치기간 중 원금상환이 있으면 남은 원금으로 원리금균등액을 계산
             first_due_date=loan.principal_repay_start_date,
             total_installments=total_installments,
             months_per_period=months_per_period,

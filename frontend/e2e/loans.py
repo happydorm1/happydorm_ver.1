@@ -102,7 +102,17 @@ with sync_playwright() as p:
     page.get_by_label("원금상환종료일").fill("2047-08-31")
     expect(page.get_by_label("상환기간(개월)")).to_have_value("300")
     page.get_by_label("상환유형").select_option(label="원금균등")
+    # 거치기간 중 원금상환(선택) — 거치기간 밖 날짜는 안내, 이자 납입일로 고치면 통과
+    gsec = page.locator("section[aria-label='거치기간 중 원금상환']")
+    gsec.get_by_role("button", name="+ 원금상환 추가").click()
+    gsec.get_by_label("상환일 1").fill("2023-02-28")
+    gsec.get_by_label("원금상환액 1").fill("100000000")
     preview = page.locator("section[aria-label='상환 개요(미리보기)']")
+    expect(preview).to_contain_text("100,000,000원 (1건)")
+    expect(preview).to_contain_text("약 95회(잔액 소진)")
+    page.get_by_role("button", name="등록", exact=True).click()
+    expect(gsec).to_contain_text("거치기간 안의 날짜여야 합니다")
+    gsec.get_by_label("상환일 1").fill("2018-11-30")
     expect(preview).to_contain_text("100회")
     expect(preview).to_contain_text("17,680,000원")
     shot(page, "02_loan_form")
@@ -115,6 +125,7 @@ with sync_playwright() as p:
     expect(ver).to_contain_text("정상")
     table = page.locator("section[aria-label='원리금 테이블']")
     expect(table).to_contain_text("총 원금 1,768,000,000원")
+    expect(table.locator("tr", has_text="2018-11-30").first).to_contain_text("100,000,000")   # 거치 중 원금상환
     shot(page, "03_schedule")
 
     # 4a) 새로고침 없이 이벤트 등록 → 방금 등록한 차입금이 선택 목록에 있어야 함
