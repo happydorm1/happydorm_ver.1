@@ -44,7 +44,7 @@ class LoanBase(BaseModel):
     grace_end_date: date | None = None
     principal_repay_start_date: date
     repay_period_months: int = Field(..., gt=0)
-    interest_rounding: Literal["ROUND", "ROUNDDOWN"] = "ROUND"
+    interest_rounding: Literal["ROUND", "ROUNDDOWN", "ROUNDDOWN10"] = "ROUND"
 
     @model_validator(mode="after")
     def check_grace_dates(self):

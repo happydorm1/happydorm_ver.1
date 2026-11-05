@@ -31,7 +31,7 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
     dormitory_id: defaultDormitory ?? "", fund_id: "", loan_code: "", assigned_date: "", assigned_amount: null as number | null,
     rate_type: "FIXED" as "FIXED" | "VARIABLE", rate: "", rate_start: "", rate_end: "", rate_table_name: "", rate_basis: "",
     grace_type_code_id: "", grace_start: "", grace_end: "", principal_start: "", principal_end: "", months: "", cycle: "", method: "",
-    rounding: "ROUND" as "ROUND" | "ROUNDDOWN",
+    rounding: "ROUND" as "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10",
   });
   const [codeTouched, setCodeTouched] = useState(false);
   const [generate, setGenerate] = useState(true);
@@ -247,9 +247,11 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
                   {ref?.methods.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
                 </select>
               </Field>
-              <Field label="이자 끝수처리" hint="2009~2010년 차입금은 엑셀에서 원 미만을 버립니다(절사).">
+              <Field label="이자 끝수처리" hint="이자 금액에만 적용합니다. 예) 2,375,868.49원 → 반올림 2,375,868 · 원 미만 절사 2,375,868 · 일의 자리 절사 2,375,860">
                 <select className={inputCls} value={f.rounding} onChange={(e) => set("rounding")(e.target.value)}>
-                  <option value="ROUND">반올림(기본)</option><option value="ROUNDDOWN">절사</option>
+                  <option value="ROUND">반올림 — 원 미만(기본)</option>
+                  <option value="ROUNDDOWN">절사 — 원 미만 버림</option>
+                  <option value="ROUNDDOWN10">절사 — 일의 자리 버림(10원 단위)</option>
                 </select>
               </Field>
             </div>

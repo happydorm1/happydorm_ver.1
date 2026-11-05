@@ -141,7 +141,7 @@ def apply_early_repayment(
             tail = engine.generate_equal_payment_schedule(
                 balance_start=new_balance, first_due_date=next_due,
                 total_installments=remaining_installments, months_per_period=months,
-                rate_lookup=rate_lookup, period_start_date=event_date,
+                rate_lookup=rate_lookup, period_start_date=event_date, rounding=loan.interest_rounding,
             )
         first = True
         for r in tail:

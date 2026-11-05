@@ -42,7 +42,7 @@ SHEETS = {
              ("배정일*", "YYYY-MM-DD"), ("금리유형*", "고정 / 변동"), ("상환주기*", "목록에서 선택"), ("상환방식*", "목록에서 선택"),
              ("거치유형", "거치가 있으면 선택"), ("거치시작일", "YYYY-MM-DD"), ("거치종료일", "YYYY-MM-DD (마지막 거치 이자 납입일 권장)"),
              ("원금상환시작일*", "첫 원금 상환예정일"), ("원금상환종료일", "마지막 원금 상환일(만기) — 넣으면 상환기간(개월)은 비워도 자동 계산"),
-             ("상환기간(개월)", "예) 324 — 원금상환종료일과 둘 중 하나는 필수"), ("이자끝수처리", "반올림(기본) / 절사"),
+             ("상환기간(개월)", "예) 324 — 원금상환종료일과 둘 중 하나는 필수"), ("이자끝수처리", "반올림(기본) / 절사(원 미만) / 절사(일의 자리)"),
              ("최초금리(%)*", "예) 2.21"), ("최초금리 적용시작일", "비우면 배정일")],
     "금리이력": [("차입금코드*", "변동금리 등 최초금리 이후 바뀐 금리만"), ("적용시작일*", "YYYY-MM-DD"), ("연금리(%)*", "예) 2.98")],
     "납부예외": [("차입금코드*", "기준일 이전 회차 중 예정대로 납부되지 않은 회차"), ("상환예정일*", "원리금 테이블의 상환예정일"),
@@ -83,7 +83,7 @@ def build_template(db: Session) -> bytes:
         groups[grp] = [c.label for c in db.execute(select(Code).where(Code.group_code == grp, Code.is_active.is_(True),
                                                                       Code.is_deleted.is_(False)).order_by(Code.sort_order)).scalars()]
     cols = [("재원", funds), ("금리유형", ["고정", "변동"]), ("상환주기", groups["REPAY_CYCLE"]),
-            ("상환방식", groups["REPAY_METHOD"]), ("거치유형", groups["GRACE_TYPE"]), ("이자끝수처리", ["반올림", "절사"])]
+            ("상환방식", groups["REPAY_METHOD"]), ("거치유형", groups["GRACE_TYPE"]), ("이자끝수처리", ["반올림", "절사(원 미만)", "절사(일의 자리)"])]
     ranges = {}
     for ci, (name, vals) in enumerate(cols, start=1):
         lists.cell(row=1, column=ci, value=name).font = Font(bold=True)
@@ -286,9 +286,10 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             if gt is None:
                 issues.err(s, r, "거치유형", f"기준정보에 없는 거치유형입니다: '{_text(v['거치유형'])}'")
                 ok = False
-        rounding = {"": "ROUND", "반올림": "ROUND", "ROUND": "ROUND", "절사": "ROUNDDOWN", "ROUNDDOWN": "ROUNDDOWN"}.get(_text(v["이자끝수처리"]))
+        rounding = {"": "ROUND", "반올림": "ROUND", "ROUND": "ROUND", "절사": "ROUNDDOWN", "ROUNDDOWN": "ROUNDDOWN",
+                    "절사(원 미만)": "ROUNDDOWN", "절사(일의 자리)": "ROUNDDOWN10", "ROUNDDOWN10": "ROUNDDOWN10"}.get(_text(v["이자끝수처리"]))
         if rounding is None:
-            issues.err(s, r, "이자끝수처리", "반올림 또는 절사로 적으세요.")
+            issues.err(s, r, "이자끝수처리", "반올림 / 절사(원 미만) / 절사(일의 자리) 중 하나로 적으세요.")
             ok = False
         vals = {}
         for col, fn, key in (("배정금액(원)", _int, "amount"), ("배정일", _date, "assigned"), ("거치시작일", _date, "gs"),

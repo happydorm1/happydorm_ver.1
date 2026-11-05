@@ -41,16 +41,50 @@ def days_between(start: datetime.date, end: datetime.date) -> int:
     return (end - start).days
 
 
+ROUNDING_LABEL = {"ROUND": "반올림(원 미만)", "ROUNDDOWN": "절사(원 미만)", "ROUNDDOWN10": "절사(일의 자리)"}
+
+
+def round_interest(exact: Decimal | float, rounding: str = "ROUND") -> int:
+    """
+    이자 끝수처리.
+    - ROUND: 원 미만 반올림(Excel ROUND(x,0), 기본)
+    - ROUNDDOWN: 원 미만 절사(Excel ROUNDDOWN(x,0) — 구 차입금 일부, 첨부6 확인)
+    - ROUNDDOWN10: 일의 자리 절사 = 10원 미만 버림(Excel ROUNDDOWN(x,-1) — 2023-12-22 주택 수작업 테이블 확인)
+    절사는 부동소수 오차(예: 2,356,499.9999999995)로 정수 경계에서 틀리지 않도록 소수 6자리에서 먼저 정리한다.
+    """
+    if rounding in ("ROUNDDOWN", "ROUNDDOWN10"):
+        d = exact if isinstance(exact, Decimal) else Decimal(repr(exact))
+        d = d.quantize(Decimal("0.000001"))
+        if rounding == "ROUNDDOWN10":
+            return int((d / 10).to_integral_value(rounding=ROUND_DOWN)) * 10
+        return int(d.to_integral_value(rounding=ROUND_DOWN))
+    return excel_round(float(exact))
+
+
 def calc_simple_interest(balance: int, days: int, annual_rate: float, rounding: str = "ROUND") -> int:
     """
-    ROUND(잔여원금 × 일수 × 금리 / 365)  — rounding="ROUND": Excel ROUND(0.5 올림, 기본)
-    rounding="ROUNDDOWN": 원 미만 절사(구 차입금 일부가 Excel ROUNDDOWN 사용 — 첨부6 확인).
-    절사는 부동소수 오차로 정수 경계에서 틀리지 않도록 Decimal로 정확히 계산한다.
+    ROUND(잔여원금 × 일수 × 금리 / 365) — 끝수처리는 round_interest 참고.
+    절사는 Decimal로 정확히 계산한다.
     """
-    if rounding == "ROUNDDOWN":
+    if rounding in ("ROUNDDOWN", "ROUNDDOWN10"):
         exact = Decimal(balance) * days * Decimal(str(annual_rate)) / 100 / 365
-        return int(exact.to_integral_value(rounding=ROUND_DOWN))
+        return round_interest(exact, rounding)
     return excel_round(balance * days * annual_rate / 100 / 365)
+
+
+def _subperiod_interests(balance: int, subperiods, rate_lookup: RateLookup, rounding: str) -> list[int]:
+    """
+    한 상환일의 이자기간을 연도경계(12/31)로 나눈 각 행의 이자.
+    - 반올림·원 미만 절사: 행마다 계산(1단계 실데이터 검증 방식 그대로)
+    - 일의 자리 절사: 수작업 테이블은 상환일 단위로 한 번에 10원 미만을 버리므로(2023-12-22 주택),
+      전체 이자를 한 번 절사한 뒤 앞 행은 각자 절사값, 마지막 행이 나머지를 갖게 해 상환일 합계를 맞춘다.
+    """
+    if rounding != "ROUNDDOWN10" or len(subperiods) == 1:
+        return [calc_simple_interest(balance, days_between(s, e), rate_lookup(e), rounding) for s, e in subperiods]
+    exact = [Decimal(balance) * days_between(s, e) * Decimal(str(rate_lookup(e))) / 100 / 365 for s, e in subperiods]
+    total = round_interest(sum(exact), rounding)
+    parts = [round_interest(x, rounding) for x in exact[:-1]]
+    return parts + [total - sum(parts)]
 
 
 def split_at_year_end(period_start: datetime.date, period_end: datetime.date):
@@ -118,11 +152,12 @@ def generate_grace_period_rows(
 
     while due_date <= grace_end_date:
         subperiods = split_at_year_end(period_start, due_date)
+        interests = _subperiod_interests(assigned_amount, subperiods, rate_lookup, rounding)
         for idx, (s, e) in enumerate(subperiods):
             is_real = idx == len(subperiods) - 1
             days = days_between(s, e)
             rate = rate_lookup(e)
-            interest = calc_simple_interest(assigned_amount, days, rate, rounding)
+            interest = interests[idx]
             rows.append(
                 ScheduleRow(
                     due_date=due_date,
@@ -177,11 +212,12 @@ def generate_equal_principal_schedule(
         principal = balance if is_last else principal_per_installment
 
         subperiods = split_at_year_end(period_start, due_date)
+        interests = _subperiod_interests(balance, subperiods, rate_lookup, rounding)
         for idx, (s, e) in enumerate(subperiods):
             is_real = idx == len(subperiods) - 1
             days = days_between(s, e)
             rate = rate_lookup(e)
-            interest = calc_simple_interest(balance, days, rate, rounding)
+            interest = interests[idx]
             rows.append(
                 ScheduleRow(
                     due_date=due_date,
@@ -215,9 +251,10 @@ def generate_equal_payment_schedule(
     months_per_period: int,
     rate_lookup: RateLookup,
     period_start_date: datetime.date,
+    rounding: str = "ROUND",
 ) -> list[ScheduleRow]:
     """
-    주택도시기금 방식(원리금균등, PPMT/IPMT). 1단계 Test B(81/81행 100% 일치) 로직 그대로.
+    주택도시기금 방식(원리금균등, PPMT/IPMT). 이자(IPMT)에만 끝수처리(rounding)를 적용하고 원금(PPMT)은 반올림. 1단계 Test B(81/81행 100% 일치) 로직 그대로.
     회계연도 경계 분리 시: 앞쪽은 메모(실지급 0), 뒤쪽 실행 회차에 전체 이자 귀속.
     금리는 변경이력이 있을 수 있으므로(VARIABLE), 회차마다 rate_lookup으로 조회한다.
     """
@@ -239,7 +276,7 @@ def generate_equal_payment_schedule(
         A = pv * r / (1 - (1 + r) ** -n)
         v = 1 + r
         bal_before_analytic = pv * v ** (installment_no - 1) - A * (v ** (installment_no - 1) - 1) / r
-        interest_full = excel_round(bal_before_analytic * r)
+        interest_full = round_interest(bal_before_analytic * r, rounding)
         principal_full = excel_round(A - bal_before_analytic * r)
         if is_last:
             principal_full = balance  # 마지막 회차 자동보정 — 잔액 전액 상환

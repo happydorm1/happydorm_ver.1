@@ -133,7 +133,7 @@ export interface LoanBase {
   dormitory_id: Id; fund_id: Id; loan_code: string; assigned_amount: number; assigned_date: string;
   rate_type: "FIXED" | "VARIABLE"; repay_cycle_code_id: Id; repay_method_code_id: Id; grace_type_code_id: Id | null;
   grace_start_date: string | null; grace_end_date: string | null; principal_repay_start_date: string;
-  repay_period_months: number; interest_rounding: "ROUND" | "ROUNDDOWN";
+  repay_period_months: number; interest_rounding: "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10";
 }
 export interface LoanCreate extends LoanBase { initial_rate: RateInput }
 export interface Loan extends LoanBase {

@@ -93,6 +93,7 @@ def generate_initial_schedule(
             months_per_period=months_per_period,
             rate_lookup=rate_lookup,
             period_start_date=period_start_date,
+            rounding=loan.interest_rounding,
         )
 
     validation = engine.validate_schedule(rows, loan.assigned_amount)
