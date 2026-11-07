@@ -26,8 +26,7 @@ def test_contacts_crud_primary_deactivate_and_permissions():
     assert a.status_code == 201, a.text
     b = client.post(url, json={"name": "이담당", "email": "lee@example.com", "is_primary": True}, headers=h).json()
     rows = {c["name"]: c for c in client.get(url, headers=h).json()}
-    assert rows["이담당"]["is_primary"] and not rows["김담당"]["is_primary"]          # 주 수신처는 1명
-    assert list(rows)[0] == "이담당"                                                     # 주 수신처가 먼저
+    assert rows["이담당"]["is_primary"] and rows["김담당"]["is_primary"]              # 기본 수신처는 여러 명 가능(Phase 23)
 
     assert client.post(url, json={"name": "x", "email": "메일아님"}, headers=h).status_code == 422
     up = client.put(f"/api/v1/contacts/{a.json()['id']}", json={"name": "김담당", "email": "kim2@example.com", "phone": "02-000-0000"}, headers=h)

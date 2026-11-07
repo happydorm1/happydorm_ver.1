@@ -62,6 +62,7 @@ def _contact(db: Session, contact_id: uuid.UUID) -> DormitoryContact:
 
 
 def _only_one_primary(db: Session, c: DormitoryContact) -> None:
+    """(Phase 23 이후 사용 안 함) 기본 수신처는 여러 명 지정 가능 — 메일 작성 때 받는 사람을 체크해 고른다."""
     if c.is_primary:
         for o in db.execute(select(DormitoryContact).where(DormitoryContact.dormitory_id == c.dormitory_id,
                                                            DormitoryContact.id != c.id,
@@ -93,7 +94,7 @@ def create_contact(dormitory_id: uuid.UUID, payload: ContactIn, db: Session = De
     c = DormitoryContact(dormitory_id=dormitory_id, created_by=current_user.id, **payload.model_dump())
     db.add(c)
     db.flush()
-    _only_one_primary(db, c)
+    # 기본 수신처는 여러 명 가능(Phase 23) — 다른 사람 표시를 해제하지 않는다
     record_audit(db, table_name="dormitory_contact", record_id=c.id, loan_id=None, action="CREATE",
                  user_id=current_user.id, field="name", after=f"{c.name} <{c.email or '-'}>")
     db.commit()
@@ -113,7 +114,7 @@ def update_contact(contact_id: uuid.UUID, payload: ContactIn, db: Session = Depe
                          user_id=current_user.id, field=f, before=old, after=new)
             setattr(c, f, new)
     c.updated_by = current_user.id
-    _only_one_primary(db, c)
+    # 기본 수신처는 여러 명 가능(Phase 23) — 다른 사람 표시를 해제하지 않는다
     db.commit()
     db.refresh(c)
     return c

@@ -158,12 +158,10 @@ export function NoticePreview({ d, actions }: { d: NoticeData; actions?: React.R
   );
 }
 
-/** 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 연다. 공문 파일은 내려받아 직접 첨부한다. */
-function mailtoFor(n: NoticeT, contacts: Contact[]): string | null {
-  const to = contacts.filter((c) => c.email).map((c) => c.email as string);
-  if (!to.length) return null;
+/** 메일 본문(받는 사람과 무관) */
+function mailBody(n: NoticeT): string {
   const g = n.generated_data, t = g.totals;
-  const body = [
+  return [
     `${g.dormitory.name} 담당자님께,`, "",
     `${n.title}을(를) 안내드립니다.`, "",
     `- 상환예정일: ${n.due_date}`,
@@ -172,7 +170,55 @@ function mailtoFor(n: NoticeT, contacts: Contact[]): string | null {
     `- 입금계좌: ${g.account.bank_account} (${g.account.account_holder})`, "",
     "자세한 내역은 첨부한 안내공문을 확인해 주십시오.", "",
   ].join("\r\n");
-  return `mailto:${to.join(",")}?subject=${encodeURIComponent(n.title)}&body=${encodeURIComponent(body)}`;
+}
+
+/** 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 연다. 공문 파일은 내려받아 직접 첨부한다. */
+function mailtoFor(n: NoticeT, to: string[]): string {
+  return `mailto:${to.join(",")}?subject=${encodeURIComponent(n.title)}&body=${encodeURIComponent(mailBody(n))}`;
+}
+
+/** 메일 작성 — 받는 사람을 체크해 고른다(기본 수신처가 미리 체크됨). 실제 발송은 PC의 메일 프로그램에서. */
+function MailDialog({ n, contacts, onClose }: { n: NoticeT; contacts: Contact[]; onClose: () => void }) {
+  const withMail = contacts.filter((c) => c.email);
+  const hasPrimary = withMail.some((c) => c.is_primary);
+  const [sel, setSel] = useState<Set<string>>(() => new Set(withMail.filter((c) => !hasPrimary || c.is_primary).map((c) => c.id)));
+  const to = withMail.filter((c) => sel.has(c.id)).map((c) => c.email as string);
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (label: string, text: string) => navigator.clipboard?.writeText(text).then(() => setCopied(label), () => setCopied(null));
+  const toggle = (id: string) => setSel((p) => { const x = new Set(p); if (x.has(id)) x.delete(id); else x.add(id); return x; });
+  return (
+    <Modal wide title="메일 작성 — 받는 사람 선택" onClose={onClose} footer={<>
+      <Button onClick={onClose}>닫기</Button>
+      <Button disabled={!to.length} onClick={() => copy("받는 사람", to.join("; "))}>받는 사람 복사</Button>
+      <Button onClick={() => copy("제목·본문", `${n.title}\n\n${mailBody(n)}`)}>제목·본문 복사</Button>
+      {to.length
+        ? <a href={mailtoFor(n, to)} onClick={() => setTimeout(onClose, 300)}
+            className="inline-flex items-center rounded-md bg-brand text-brand-ink px-3 py-1.5 text-sm font-medium">메일 프로그램 열기 ({to.length}명)</a>
+        : <Button variant="primary" disabled>메일 프로그램 열기</Button>}</>}>
+      <p className="text-sm font-medium">{n.title}</p>
+      <ul className="mt-3 divide-y divide-line border border-line rounded-lg" aria-label="받는 사람">
+        {contacts.map((c) => (
+          <li key={c.id} className="px-3 py-2">
+            <label className={`flex items-center gap-2 text-sm ${c.email ? "" : "text-ink-3"}`}>
+              <input type="checkbox" disabled={!c.email} checked={sel.has(c.id)} onChange={() => toggle(c.id)} />
+              <span className="font-medium">{c.name}</span>
+              {c.is_primary && <Badge tone="brand">기본 수신</Badge>}
+              <span className="text-ink-2">{[c.organization, c.position].filter(Boolean).join(" · ")}</span>
+              <span className="ml-auto break-all">{c.email ?? "이메일 없음"}</span>
+            </label>
+          </li>))}
+      </ul>
+      <div className="mt-2 flex gap-3 text-xs">
+        <button type="button" className="underline" onClick={() => setSel(new Set(withMail.map((c) => c.id)))}>모두 선택</button>
+        <button type="button" className="underline" onClick={() => setSel(new Set())}>모두 해제</button>
+        <span className="text-ink-2">{to.length}명 선택</span>
+      </div>
+      {copied && <div className="mt-2"><Notice tone="success" onClose={() => setCopied(null)}>{copied}을(를) 복사했습니다. 메일(웹메일 포함)에 붙여 넣으세요.</Notice></div>}
+      <p className="mt-3 text-xs text-ink-3">이 시스템은 메일을 직접 보내지 않습니다. '메일 프로그램 열기'는 PC에 설정된 기본 메일 프로그램(Outlook 등)에
+        받는 사람·제목·본문을 채워 열어 주며, 발송은 그 프로그램에서 합니다. 기본 메일 프로그램이 없거나 웹메일을 쓰면 '복사' 버튼으로 붙여 넣으세요.
+        공문 파일(Excel·PDF)은 내려받아 첨부합니다.</p>
+    </Modal>
+  );
 }
 
 function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false, onDeleted }: {
@@ -181,6 +227,7 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
   const [del, setDel] = useState<NoticeT | null>(null);
   const { data, error } = useAsync<NoticeT[]>(() => api.notices(dormId), [dormId]);
   const [view, setView] = useState<NoticeT | null>(null);
+  const [mail, setMail] = useState<NoticeT | null>(null);
   const [err, setErr] = useState<string | null>(null);
   return (
     <Card title={`발급 이력 — ${dormName}`}>
@@ -195,10 +242,9 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
               : <span className="rounded border border-warning px-1.5 text-[11px] text-warning-ink">미수신</span>}
             <span className="text-xs text-ink-2 tabular">상환일 {n.due_date} · 납부기한 {n.payment_deadline} · 합계 {won(n.generated_data.totals.total)} · 발급 {fmtDateTime(n.created_at)}</span>
             <span className="ml-auto flex gap-2">
-            {(() => { const href = mailtoFor(n, contacts); return href
-              ? <a href={href} className="inline-flex items-center rounded-md border border-line px-2 py-1 text-xs hover:bg-surface-2"
-                  title={`받는 사람: ${contacts.filter((c) => c.email).map((c) => c.email).join(", ")}`}>메일 작성</a>
-              : <span className="text-[11px] text-ink-3 self-center">수신처 이메일 없음</span>; })()}
+            {contacts.some((c) => c.email)
+              ? <Button size="sm" onClick={() => setMail(n)}>메일 작성</Button>
+              : <span className="text-[11px] text-ink-3 self-center">수신처 이메일 없음</span>}
             {canDownload && <>
               {(["xlsx", "pdf"] as const).map((f) => <Button key={f} size="sm" onClick={() => downloadFile(`/notices/${n.id}/download`, { format: f }, `${n.title}.${f}`)
                 .catch((e) => setErr(e.message))}>{f === "xlsx" ? "Excel" : "PDF"}</Button>)}
@@ -208,7 +254,8 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
         </ul>
       )}
       <p className="mt-2 text-xs text-ink-3">발급본은 발급 당시 값으로 고정됩니다. 이후 원리금 테이블이 바뀌면 새로 발급하세요.
-        '메일 작성'은 PC의 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 엽니다 — 내려받은 공문(Excel·PDF)을 첨부해 보내세요.</p>
+        '메일 작성'에서 받는 사람을 체크해 고르면 PC의 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 엽니다 — 내려받은 공문(Excel·PDF)을 첨부해 보내세요.</p>
+      {mail && <MailDialog n={mail} contacts={contacts} onClose={() => setMail(null)} />}
       {del && <DeleteDialog title="안내공문 삭제" target={`${del.title} (상환일 ${del.due_date})`}
         effects={["발급 이력에서 빠지고, SPC 담당자 알림함의 발급 안내도 함께 숨겨집니다.", "원리금 테이블·납부 기록에는 영향이 없습니다."]}
         onClose={() => setDel(null)}
@@ -293,7 +340,7 @@ function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dor
   return (
     <Card title={`수신처·연락처 — ${dormName}`} actions={<div className="flex items-center gap-3">
       <label className="flex items-center gap-1.5 text-xs text-ink-2"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />사용중지 포함</label>
-      {writer && <Button size="sm" variant="primary" onClick={() => { setErr(null); setEdit({ v: { ...EMPTY, is_primary: !(data ?? []).some((c) => c.is_active) } }); }}>+ 연락처 추가</Button>}
+      {writer && <Button size="sm" variant="primary" onClick={() => { setErr(null); setEdit({ v: { ...EMPTY, is_primary: true } }); }}>+ 연락처 추가</Button>}
     </div>}>
       {(error || (err && !edit && !off)) && <Notice tone="error" onClose={() => setErr(null)}>{error ?? err}</Notice>}
       {!data ? <Loading /> : data.length === 0 ? (
@@ -305,7 +352,7 @@ function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dor
               <th key={h} scope="col" className="px-2 py-1.5 text-left font-medium bg-surface-2">{h}</th>)}</tr></thead>
             <tbody>{data.map((c) => (
               <tr key={c.id} className={`border-t border-line ${c.is_active ? "" : "text-ink-3 line-through"}`}>
-                <td className="px-2 py-1.5 whitespace-nowrap">{c.name}{c.is_primary && <Badge tone="brand">주 수신처</Badge>}{!c.is_active && <Badge>사용중지</Badge>}</td>
+                <td className="px-2 py-1.5 whitespace-nowrap">{c.name}{c.is_primary && <Badge tone="brand">기본 수신</Badge>}{!c.is_active && <Badge>사용중지</Badge>}</td>
                 <td className="px-2 py-1.5">{c.organization}</td><td className="px-2 py-1.5">{c.position}</td>
                 <td className="px-2 py-1.5 break-all">{c.email && <a className="underline" href={`mailto:${c.email}`}>{c.email}</a>}</td>
                 <td className="px-2 py-1.5 whitespace-nowrap tabular">{c.phone}</td><td className="px-2 py-1.5 text-xs text-ink-2">{c.note}</td>
@@ -317,7 +364,7 @@ function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dor
           </table>
         </div>
       )}
-      <p className="mt-2 text-xs text-ink-3">'메일 작성'은 사용 중인 연락처 중 이메일이 있는 사람 모두를 받는 사람으로 넣습니다. 연락처는 지우지 않고 사용중지하며 변경 내용은 감사로그에 남습니다.</p>
+      <p className="mt-2 text-xs text-ink-3">연락처는 여러 명 등록할 수 있습니다. '기본 수신'으로 표시한 사람은 '메일 작성' 때 미리 체크되며, 보낼 때 받는 사람을 체크해 바꿀 수 있습니다. 연락처는 지우지 않고 사용중지하며 변경 내용은 감사로그에 남습니다.</p>
       {edit && (
         <Modal title={edit.id ? "연락처 수정" : "연락처 추가"} onClose={() => setEdit(null)} footer={<>
           <Button onClick={() => setEdit(null)}>취소</Button>
@@ -331,7 +378,7 @@ function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dor
             <Field label="메모"><input className={inputCls} aria-label="메모" value={edit.v.note ?? ""} onChange={(e) => set("note", e.target.value)} /></Field>
           </div>
           <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={edit.v.is_primary} onChange={(e) => set("is_primary", e.target.checked)} />
-            주 수신처(기숙사당 1명 — 고르면 다른 사람의 주 수신처 표시는 해제)</label>
+            기본 수신 — '메일 작성' 때 받는 사람으로 미리 체크(여러 명 가능)</label>
           {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
         </Modal>
       )}

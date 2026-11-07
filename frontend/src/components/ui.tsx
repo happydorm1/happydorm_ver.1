@@ -119,12 +119,15 @@ export function Modal({ title, onClose, children, footer, wide, xl }: {
   title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; xl?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // 첫 입력칸 포커스는 '열릴 때 한 번만' — 예전엔 onClose가 바뀔 때마다(=글자 입력마다) 다시 실행돼 커서가 첫 칸(이름)으로 돌아갔다
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>("input,select,textarea,button")?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="presentation" onMouseDown={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.stopPropagation()}
