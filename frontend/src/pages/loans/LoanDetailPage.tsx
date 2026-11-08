@@ -7,7 +7,7 @@ import {
   Badge, Button, Card, Field, Loading, Modal, MoneyInput, Notice, PageHeader, RateField, Tabs, fmtDateTime, inputCls, moneyHint, useAsync,
 } from "../../components/ui";
 import { takeFlash } from "../../lib/flash";
-import { pct, won } from "../../lib/format";
+import { AUDIT_ACTION, pct, won } from "../../lib/format";
 import { canSeeHistory, canWrite, isAdmin } from "../../lib/perm";
 import { DeleteDialog } from "../../components/DeleteDialog";
 import { setFlash as setNextFlash } from "../../lib/flash";
@@ -247,7 +247,7 @@ function RateDialog({ loan, canRecalc, onClose, onSaved }: { loan: Loan; canReca
 }
 
 const TABLE_LABEL: Record<string, string> = {
-  loan: "차입금", interest_rate_history: "금리이력", loan_event: "이벤트", actual_payment: "실제납부", generated_document: "공문",
+  loan: "차입금", interest_rate_history: "금리이력", loan_event: "이벤트", actual_payment: "실제납부", bank_deposit: "입금 확인", generated_document: "공문",
   repayment_schedule_version: "원리금 테이블", event_request: "기안·결재",
 };
 
@@ -296,7 +296,7 @@ function HistoryTab({ loanId, loanCode, admin, onDeleted }: { loanId: string; lo
                   <tr key={a.id} className="border-t border-line align-top">
                     <td className="px-2 py-1.5 whitespace-nowrap tabular">{fmtDateTime(a.changed_at)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{TABLE_LABEL[a.table_name] ?? a.table_name}</td>
-                    <td className="px-2 py-1.5">{a.action}</td>
+                    <td className="px-2 py-1.5">{AUDIT_ACTION[a.action] ?? a.action}</td>
                     <td className="px-2 py-1.5">{a.changed_field ?? ""}</td>
                     <td className="px-2 py-1.5 max-w-[220px] break-words">{a.before_value ?? ""}</td>
                     <td className="px-2 py-1.5 max-w-[260px] break-words">{a.after_value ?? ""}</td>

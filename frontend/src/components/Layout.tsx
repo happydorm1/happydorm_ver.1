@@ -22,6 +22,7 @@ export const MENU: NavNode[] = [
     { label: "안내공문", who: "staff", children: [
       { label: "발송대상 현황", route: "notices/targets", who: "writer" },
       { label: "발송완료", route: "notices/issued", who: "staff" }] },
+    { label: "입금 확인·승인", route: "deposits", who: "staff" },
     { label: "상환 실적 관리", route: "payments", who: "staff" }] },
   { label: "마이페이지", children: [{ label: "알림", route: "notifications" }, { label: "기준정보", route: "admin/reference", who: "writer" }] },
   { label: "관리자", children: [{ label: "사용자·권한설정", route: "admin/users", who: "admin" },

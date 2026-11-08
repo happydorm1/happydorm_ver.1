@@ -17,6 +17,7 @@ import { EventsPage } from "./pages/events/EventsPage";
 import { NoticesPage } from "./pages/NoticesPage";
 import { NoticeIssuedPage, NoticeTargetsPage } from "./pages/NoticeListsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
+import { DepositsPage } from "./pages/DepositsPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 
 const TABS = ["info", "rates", "schedule", "evidence", "history"] as const;
@@ -59,6 +60,10 @@ export default function App() {
     const t = route.query.get("tab");
     page = <EventsPage me={me} asOf={asOf} loanId={route.query.get("loan") ?? undefined}
       tab={t === "list" || t === "approval" ? t : "new"} />;
+  } else if (section === "deposits") {
+    title = "입금 확인·승인";
+    const t = route.query.get("tab");
+    page = <DepositsPage me={me} tab={t === "COMPLETED" || t === "EXCLUDED" || t === "ALL" ? t : "PENDING"} />;
   } else if (section === "payments") {
     title = "상환 실적 관리";
     page = <PaymentsPage me={me} asOf={asOf} tab={route.query.get("tab") === "loan" ? "loan" : "overdue"} loanId={route.query.get("loan") ?? undefined} />;

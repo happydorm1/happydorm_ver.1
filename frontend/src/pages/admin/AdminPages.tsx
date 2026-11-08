@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import type { AccessLogItem, AdminAuditItem, Backups, Code, Fund, Holiday, Me, Role, SecurityStatus, UserItem } from "../../api/types";
 import { Badge, Button, Card, Field, Loading, Modal, Notice, PageHeader, Tabs, fmtDateTime, inputCls, useAsync, inputSm } from "../../components/ui";
+import { AUDIT_ACTION } from "../../lib/format";
 import { passwordProblems } from "../../lib/password";
 import { canWrite, isAdmin } from "../../lib/perm";
 import { refreshRefData, useRefData } from "../../lib/refdata";
@@ -231,7 +232,7 @@ function UserDialog({ me, user, onClose, onSaved }: { me: Me | null; user: UserI
 }
 
 // ---------------- 감사·접근기록, 백업·보안(§42, §45) ----------------
-const TABLE: Record<string, string> = { loan: "차입금", interest_rate_history: "금리이력", loan_event: "이벤트", actual_payment: "실제납부",
+const TABLE: Record<string, string> = { loan: "차입금", interest_rate_history: "금리이력", loan_event: "이벤트", actual_payment: "실제납부", bank_deposit: "입금 확인",
   generated_document: "공문", event_request: "기안·결재", app_user: "사용자·권한", fund: "재원", code: "코드" };
 const ACTION: Record<string, string> = { VIEW: "조회", CHANGE: "변경", DOWNLOAD: "다운로드", DENIED: "거부", LOGIN_SUCCESS: "로그인", LOGIN_FAILED: "로그인 실패", LOGIN_LOCKED: "잠김 상태 로그인" };
 
@@ -272,7 +273,7 @@ function AuditTab() {
         <thead><tr>{["일시", "대상", "작업", "항목", "변경 전", "변경 후", "사용자", "사유"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
         <tbody>{data.slice(0, n).map((a, i) => <tr key={i} className="border-t border-line align-top">
           <td className="px-3 py-1.5 whitespace-nowrap tabular">{fmtDateTime(a.changed_at)}</td><td className="px-3 py-1.5 whitespace-nowrap">{TABLE[a.table_name] ?? a.table_name}</td>
-          <td className="px-3 py-1.5">{a.action}</td><td className="px-3 py-1.5">{a.field ?? ""}</td>
+          <td className="px-3 py-1.5">{AUDIT_ACTION[a.action] ?? a.action}</td><td className="px-3 py-1.5">{a.field ?? ""}</td>
           <td className="px-3 py-1.5 max-w-[200px] break-words">{a.before ?? ""}</td><td className="px-3 py-1.5 max-w-[260px] break-words">{a.after ?? ""}</td>
           <td className="px-3 py-1.5 whitespace-nowrap">{a.changed_by_name ?? "-"}</td><td className="px-3 py-1.5">{a.reason ?? ""}</td></tr>)}</tbody></table>
           <More shown={Math.min(n, data.length)} total={data.length} onMore={() => setN(n + 50)} /></div>}

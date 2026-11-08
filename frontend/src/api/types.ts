@@ -306,3 +306,20 @@ export interface NoticeTarget {
 }
 export interface NoticeTargets { as_of: string; default_window: boolean; days: number; count: number; items: NoticeTarget[] }
 export interface NoticesIssued { count: number; unreceived: number; items: NoticeStatusItem[] }
+
+// 입금 확인·승인(Phase 23)
+export interface DepositNotice {
+  id: string; title: string; dormitory_id: string; dormitory_name: string; due_date: string; payment_deadline: string;
+  total: number; principal: number; interest: number; is_deleted: boolean;
+}
+export interface Deposit {
+  id: string; deposit_date: string; depositor: string; amount: number; bank_memo: string | null; source: "UPLOAD" | "MANUAL";
+  file_name: string | null; status: "PENDING" | "COMPLETED" | "EXCLUDED"; hold_reasons: { code: string; label: string }[];
+  auto_approved: boolean; manual_done: boolean; decided_by_name: string | null; decided_at: string | null; decision_note: string | null;
+  payment_count: number; created_at: string; notice: DepositNotice | null;
+}
+export interface DepositList { items: Deposit[]; counts: Record<"PENDING" | "COMPLETED" | "EXCLUDED", number>; auto_approve_limit: number }
+export interface DepositUploadResult {
+  added: number; duplicates: number; auto_completed: number; pending: number; read?: number;
+  errors: { row: number | null; message: string }[];
+}

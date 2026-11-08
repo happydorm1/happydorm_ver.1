@@ -4,8 +4,7 @@ import type {
   AccessLogItem, AdminAuditItem, Backups, EventListItem, EventRequestItem, Holiday, Notice, NoticeData, NotificationItem,
   OverdueList, Payment, PaymentSummary, SecurityStatus, Template, UserItem,
   Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput, DeletionRecord, AdminDormitory,
-  MigrationBatch, MigrationResult, DormAccount, NoticeTargets, NoticesIssued,
-} from "./types";
+  MigrationBatch, MigrationResult, DormAccount, NoticeTargets, NoticesIssued, Deposit, DepositList, DepositNotice, DepositUploadResult } from "./types";
 
 const TOKEN_KEY = "access_token";
 
@@ -125,6 +124,16 @@ export const api = {
   createPayment: (loanId: string, body: Record<string, unknown>) => request<Payment>(`/loans/${loanId}/payments`, undefined, body),
   cancelPayment: (loanId: string, id: string, reason: string) => request<Payment>(`/loans/${loanId}/payments/${id}/cancel`, undefined, { reason }),
   overdue: (asOf: string) => request<OverdueList>("/payments/overdue", { as_of: asOf }),
+  // 입금 확인·승인(Phase 23)
+  deposits: (status?: string) => request<DepositList>("/deposits", status ? { status } : {}),
+  createDeposit: (body: { deposit_date: string; depositor: string; amount: number; bank_memo?: string | null }) =>
+    request<DepositUploadResult>("/deposits", undefined, body),
+  depositNoticeOptions: (id: string) => request<DepositNotice[]>(`/deposits/${id}/notice-options`),
+  assignDeposit: (id: string, notice_id: string | null) => request<Deposit>(`/deposits/${id}/assign`, undefined, { notice_id }),
+  approveDeposit: (id: string, note?: string) => request<Deposit>(`/deposits/${id}/approve`, undefined, { note: note || null }),
+  manualCompleteDeposit: (id: string, reason: string) => request<Deposit>(`/deposits/${id}/manual-complete`, undefined, { reason }),
+  excludeDeposit: (id: string, reason: string) => request<Deposit>(`/deposits/${id}/exclude`, undefined, { reason }),
+  revertDeposit: (id: string, reason: string) => request<Deposit>(`/deposits/${id}/revert`, undefined, { reason }),
   // 안내공문
   templates: () => request<Template[]>("/document-templates"),
   createTemplate: (body: Record<string, unknown>) => request<Template>("/document-templates", undefined, body),
@@ -226,6 +235,22 @@ export async function uploadAttachment(loanId: string, file: File, form: { owner
     throw new ApiError(res.status, detail);
   }
   return res.json() as Promise<Attachment>;
+}
+
+/** 입금내역 파일(xlsx·csv) 업로드 → 공문 대사·자동 승인 결과 */
+export async function uploadDeposits(file: File): Promise<DepositUploadResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  dataVersion.n += 1;
+  const res = await fetch("/api/v1/deposits/upload", { method: "POST", body: fd,
+    headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {} });
+  if (res.status === 401) { auth.clear(); window.dispatchEvent(new Event("auth:expired")); throw new ApiError(401, "로그인이 만료되었습니다."); }
+  if (!res.ok) {
+    let detail = `요청 실패 (${res.status})`;
+    try { const b = await res.json(); if (typeof b.detail === "string") detail = b.detail; } catch { /* noop */ }
+    throw new ApiError(res.status, detail);
+  }
+  return res.json() as Promise<DepositUploadResult>;
 }
 
 /** 기존 차입금 이관: 검사(validate) 또는 실행(apply) — 엑셀 파일·기준일·납부완료 처리 여부 */

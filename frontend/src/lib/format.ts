@@ -1,6 +1,11 @@
 // 금액 표기: 표·툴팁은 원 단위 전체(1,234,567원), 타일·축은 억/만 단위로 줄여 쓴다.
 const nf = new Intl.NumberFormat("ko-KR");
 
+/** 변경이력의 처리 구분(입금 확인·승인 등) 한글 이름 — 없는 값은 그대로 표시 */
+export const AUDIT_ACTION: Record<string, string> = {
+  APPROVE: "승인", AUTO_APPR: "자동 승인", MANUAL: "수동 처리 완료", EXCLUDE: "제외", REVERT: "되돌림", ASSIGN: "공문 지정",
+};
+
 export const won = (n: number | null | undefined) => (n == null ? "-" : `${nf.format(n)}원`);
 export const num = (n: number | null | undefined) => (n == null ? "-" : nf.format(n));
 
