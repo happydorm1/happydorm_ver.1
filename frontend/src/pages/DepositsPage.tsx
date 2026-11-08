@@ -58,6 +58,7 @@ export function DepositsPage({ me, tab }: { me: Me | null; tab: Tab }) {
                     <td className="px-3 py-2 min-w-[220px]">{n ? <>
                       <a className="underline" href={href("notices", { dormitory: n.dormitory_id, due: n.due_date })}>{n.title}</a>
                       <div className="text-xs text-ink-2 tabular">납부기한 {n.payment_deadline} · 공문 {won(n.total)}
+                        {" · "}{n.received_at ? "수신 확인" : <span className="text-warning-ink">미수신</span>}
                         {diff !== 0 && diff !== null && <b className="text-critical-ink"> · 차액 {diff > 0 ? "+" : ""}{won(diff)}</b>}</div></>
                       : <span className="text-xs text-ink-3">연결된 공문 없음</span>}</td>
                     <td className="px-3 py-2">
@@ -107,9 +108,9 @@ function UploadCard({ onDone, onManual, onError }: { onDone: (r: DepositUploadRe
     <Card title="입금내역 올리기" actions={<div className="flex gap-2">
       <Button size="sm" onClick={() => downloadFile("/deposits/template", {}, "입금내역_양식.xlsx").catch((e) => onError(e.message))}>입금내역 양식 내려받기</Button>
       <Button size="sm" onClick={onManual}>직접 입력</Button></div>}>
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] items-end">
         <Field label="거래내역 파일(.xlsx·.csv)">
-          <input key={key} type="file" accept=".xlsx,.csv" aria-label="입금내역 파일" className="text-sm"
+          <input key={key} type="file" accept=".xlsx,.csv" aria-label="입금내역 파일" className={inputCls}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
         <Button variant="primary" disabled={!file || busy} onClick={async () => {
           if (!file) return;

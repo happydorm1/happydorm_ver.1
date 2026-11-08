@@ -48,7 +48,9 @@ def _notice_dict(db: Session, doc: GeneratedDocument | None) -> dict | None:
     return {"id": str(doc.id), "title": doc.title, "dormitory_id": str(doc.dormitory_id),
             "dormitory_name": dorm.dormitory_name if dorm else "", "due_date": doc.due_date.isoformat(),
             "payment_deadline": doc.payment_deadline.isoformat(), "total": t["total"], "principal": t["principal"],
-            "interest": t["interest"], "is_deleted": doc.is_deleted}
+            "interest": t["interest"], "is_deleted": doc.is_deleted,
+            # 수신 여부는 표시만 — 대사·자동 승인 조건이 아니다(메일·출력본으로 받고 시스템 열람 없이 입금하는 경우가 있어서)
+            "received_at": doc.received_at.isoformat() if doc.received_at else None}
 
 
 def _out(db: Session, d: BankDeposit) -> dict:

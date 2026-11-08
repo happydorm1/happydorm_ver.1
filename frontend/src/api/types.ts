@@ -310,7 +310,7 @@ export interface NoticesIssued { count: number; unreceived: number; items: Notic
 // 입금 확인·승인(Phase 23)
 export interface DepositNotice {
   id: string; title: string; dormitory_id: string; dormitory_name: string; due_date: string; payment_deadline: string;
-  total: number; principal: number; interest: number; is_deleted: boolean;
+  total: number; principal: number; interest: number; is_deleted: boolean; received_at: string | null;
 }
 export interface Deposit {
   id: string; deposit_date: string; depositor: string; amount: number; bank_memo: string | null; source: "UPLOAD" | "MANUAL";
