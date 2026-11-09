@@ -10,3 +10,5 @@ frontend/dist/
 backend/backups/
 backend/attachments/
 .pytest_cache/
+# 데이터 옮기기(이관) 파일 — 절대 올리지 않는다
+*.dlt
