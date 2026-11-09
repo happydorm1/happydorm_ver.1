@@ -119,6 +119,49 @@ def upcoming_rate_change(db: Session, loan: Loan, dorm: Dormitory, fund: Fund, v
     return {"payload": payload, "title": f"[금리변동 D-{business_days_left}] {dorm.dormitory_name} {change_date}", "body": body}
 
 
+def _scan_unpaid_due_soon(db: Session, as_of: date, dormitory_id: uuid.UUID | None) -> int:
+    """
+    납부기한 임박 미입금(Phase 23): 발급한 공문의 납부기한이 영업일 D-3 이내인데 입금(완료·대기)도 납부 기록도 없으면
+    재단 자금담당자(기숙사 담당자 포함)에게 한 번 알린다. 알림 종류 UNPAID_D3, 기준일 = 상환예정일.
+    """
+    from datetime import timedelta
+
+    from app.domain.notice_status import DUE_SOON_DAYS, _latest_docs, payment_states
+    q = select(Dormitory).where(Dormitory.is_deleted.is_(False))
+    if dormitory_id:
+        q = q.where(Dormitory.id == dormitory_id)
+    dorms = {d.id: d for d in db.execute(q).scalars()}
+    docs = {k: d for k, d in _latest_docs(db, set(dorms), since=as_of - timedelta(days=120)).items()
+            if d.payment_deadline >= as_of}
+    pay = payment_states(db, docs, as_of=as_of)
+    n = 0
+    for (did, due), doc in docs.items():
+        st = pay.get((did, due), {})
+        srcs = (doc.generated_data or {}).get("sources") or []
+        if not st.get("due_soon") or not srcs:
+            continue
+        loan_id = uuid.UUID(srcs[0]["loan_id"])
+        existing = _existing_keys(db, loan_id)
+        dorm = dorms[did]
+        total = doc.generated_data["totals"]["total"]
+        left = st["days_left"]
+        title = f"[미입금 D-{left}] {dorm.dormitory_name} 납부기한 {doc.payment_deadline}"
+        body = (f"{doc.title} — 납부기한 {doc.payment_deadline}(영업일 {left}일 남음)까지 입금이 확인되지 않았습니다. "
+                f"납부금액 {total:,}원. 발송완료 목록에서 '독촉 메일'로 안내할 수 있습니다.")
+        payload = {"notice_id": str(doc.id), "dormitory_name": dorm.dormitory_name, "due_date": due.isoformat(),
+                   "payment_deadline": doc.payment_deadline.isoformat(), "total": total, "days_left": left,
+                   "threshold": DUE_SOON_DAYS}
+        for u in rate_change_recipients(db, dorm):
+            key = (u.id, "UNPAID_D3", due)
+            if key in existing:
+                continue
+            db.add(Notification(recipient_user_id=u.id, loan_id=loan_id, dormitory_id=did, notification_type="UNPAID_D3",
+                                reference_date=due, trigger_date=as_of, title=title, body=body, payload=payload))
+            existing.add(key)
+            n += 1
+    return n
+
+
 def scan_notifications(db: Session, as_of: date, *, dormitory_id: uuid.UUID | None = None) -> dict:
     holidays = load_holidays(db)
     created = {"repayment": 0, "rate_change": 0}
@@ -198,6 +241,7 @@ def scan_notifications(db: Session, as_of: date, *, dormitory_id: uuid.UUID | No
                 existing.add(key)
                 created["rate_change"] += 1
 
+    created["unpaid_due_soon"] = _scan_unpaid_due_soon(db, as_of, dormitory_id)
     db.commit()
     return {"as_of": as_of, "loans_scanned": loans_scanned, "created": created,
             "thresholds": list(REPAYMENT_THRESHOLDS)}

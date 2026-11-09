@@ -4,7 +4,7 @@ import type {
   AccessLogItem, AdminAuditItem, Backups, EventListItem, EventRequestItem, Holiday, Notice, NoticeData, NotificationItem,
   OverdueList, Payment, PaymentSummary, SecurityStatus, Template, UserItem,
   Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput, DeletionRecord, AdminDormitory,
-  MigrationBatch, MigrationResult, DormAccount, NoticeTargets, NoticesIssued, Deposit, DepositList, DepositNotice, DepositUploadResult } from "./types";
+  MigrationBatch, MigrationResult, DormAccount, NoticeTargets, NoticesIssued, Deposit, DepositList, DepositNotice, DepositUploadResult, DormIdent } from "./types";
 
 const TOKEN_KEY = "access_token";
 
@@ -134,6 +134,9 @@ export const api = {
   manualCompleteDeposit: (id: string, reason: string) => request<Deposit>(`/deposits/${id}/manual-complete`, undefined, { reason }),
   excludeDeposit: (id: string, reason: string) => request<Deposit>(`/deposits/${id}/exclude`, undefined, { reason }),
   revertDeposit: (id: string, reason: string) => request<Deposit>(`/deposits/${id}/revert`, undefined, { reason }),
+  dormIdents: () => request<DormIdent[]>("/deposits/dorm-idents"),
+  putDormIdent: (id: string, body: { virtual_account: string | null; customer_key: string | null; payer_names: string[] }) =>
+    request<{ ok: boolean }>(`/deposits/dorm-idents/${id}`, undefined, body, "PUT"),
   // 안내공문
   templates: () => request<Template[]>("/document-templates"),
   createTemplate: (body: Record<string, unknown>) => request<Template>("/document-templates", undefined, body),

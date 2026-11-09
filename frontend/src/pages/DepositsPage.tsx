@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, downloadFile, uploadDeposits } from "../api/client";
-import type { Deposit, DepositList, DepositNotice, DepositUploadResult, Me } from "../api/types";
+import type { Deposit, DepositList, DepositNotice, DepositUploadResult, DormIdent, Me } from "../api/types";
 import { Badge, Button, Card, Field, Loading, Modal, MoneyInput, Notice, PageHeader, Tabs, fmtDateTime, inputCls, moneyHint, useAsync } from "../components/ui";
 import { won } from "../lib/format";
 import { canWrite } from "../lib/perm";
@@ -25,6 +25,7 @@ export function DepositsPage({ me, tab }: { me: Me | null; tab: Tab }) {
   const [err, setErr] = useState<string | null>(null);
   const [act, setAct] = useState<{ kind: "approve" | "manual" | "exclude" | "revert" | "assign"; d: Deposit } | null>(null);
   const [manual, setManual] = useState(false);
+  const [idents, setIdents] = useState(false);
   const c = data?.counts;
   const limit = data?.auto_approve_limit ?? 20_000_000;
   const done = (m: string) => { setAct(null); setMsg(m); reload(); };
@@ -33,7 +34,9 @@ export function DepositsPage({ me, tab }: { me: Me | null; tab: Tab }) {
       <PageHeader title="입금 확인·승인"
         sub={<>은행 입금내역을 발급한 안내공문과 맞춰 봅니다. 공문 합계 <b>{won(limit)} 미만</b>이고 금액이 <b>1원까지 같으며</b> 납부기한 안이면 자동 승인,
           그 밖에는 <b>대기</b>로 접수해 재단 자금담당자가 확인·승인합니다. 완료되면 상환 실적(납부 기록)에 반영됩니다.</>} />
-      {writer && <UploadCard onDone={(r) => { setErr(null); setMsg(resultText(r)); reload(); }} onManual={() => setManual(true)} onError={setErr} />}
+      {writer && <UploadCard onDone={(r) => { setErr(null); setMsg(resultText(r)); reload(); }} onManual={() => setManual(true)} onError={setErr}
+        onIdents={() => setIdents(true)} />}
+      {!writer && <div className="flex justify-end"><Button size="sm" onClick={() => setIdents(true)}>기숙사별 입금 식별정보 보기</Button></div>}
       {msg && <Notice tone="success" onClose={() => setMsg(null)}>{msg}</Notice>}
       {(err || error) && <Notice tone="error" onClose={() => setErr(null)}>{err ?? error}</Notice>}
       <Tabs label="입금 상태" value={tab} onChange={(t) => go("deposits", { tab: t })} tabs={[
@@ -43,23 +46,29 @@ export function DepositsPage({ me, tab }: { me: Me | null; tab: Tab }) {
         {!data ? <Loading /> : data.items.length === 0 ? <p className="text-sm text-ink-3">{tab === "PENDING" ? "대기 중인 입금이 없습니다." : "입금내역이 없습니다."}</p> : (
           <div className="overflow-x-auto -mx-4">
             <table className="w-full text-sm" aria-label="입금내역">
-              <thead><tr className="text-xs text-ink-2 bg-surface-2">{["입금일", "입금자 · 적요", "입금액", "연결 공문", "상태 · 확인사항", ""].map((h, i) =>
+              <thead><tr className="text-xs text-ink-2 bg-surface-2">{["입금일", "입금인명 · 고객정보", "입금액", "연결 공문", "상태 · 확인사항", ""].map((h, i) =>
                 <th key={i} scope="col" className={`px-3 py-2 font-medium ${i === 2 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
               <tbody>{data.items.map((d) => {
                 const n = d.notice;
-                const diff = n ? d.amount - n.total : null;
+                const diff = n && !d.hold_reasons.some((r) => r.code === "SPLIT_WAIT") ? (d.group ? d.group.total : d.amount) - n.total : null;
                 const blocked = d.hold_reasons.some((r) => BLOCKING.includes(r.code));
                 return (
                   <tr key={d.id} className="border-t border-line align-top">
-                    <td className="px-3 py-2 tabular whitespace-nowrap">{d.deposit_date}</td>
+                    <td className="px-3 py-2 tabular whitespace-nowrap">{d.deposit_date}{d.deposit_time && <div className="text-[11px] text-ink-3">{d.deposit_time.slice(0, 5)}</div>}</td>
                     <td className="px-3 py-2">{d.depositor}{d.bank_memo && <div className="text-xs text-ink-3">{d.bank_memo}</div>}
+                      {(d.customer_name || d.customer_key || d.virtual_account) && <div className="text-[11px] text-ink-2">
+                        {[d.customer_name && `고객명 ${d.customer_name}`, d.customer_key && `고객KEY ${d.customer_key}`, d.virtual_account && `가상계좌 ${d.virtual_account}`].filter(Boolean).join(" · ")}</div>}
+                      <div className="text-[11px]">{d.dormitory ? <span className="text-ink font-medium">→ {d.dormitory.name}</span> : <span className="text-ink-3">기숙사 미확인</span>}</div>
                       <div className="text-[11px] text-ink-3">{d.source === "MANUAL" ? "직접 입력" : d.file_name}</div></td>
-                    <td className="px-3 py-2 text-right tabular font-semibold whitespace-nowrap">{won(d.amount)}</td>
+                    <td className="px-3 py-2 text-right tabular font-semibold whitespace-nowrap">{won(d.amount)}
+                      {d.group && <div className="mt-0.5"><span className="rounded border border-brand px-1.5 text-[11px] font-normal text-ink" title={d.group.amounts.map((a) => won(a)).join(" + ")}>
+                        분할 {d.group.count}건 합계 {won(d.group.total)}</span></div>}</td>
                     <td className="px-3 py-2 min-w-[220px]">{n ? <>
                       <a className="underline" href={href("notices", { dormitory: n.dormitory_id, due: n.due_date })}>{n.title}</a>
                       <div className="text-xs text-ink-2 tabular">납부기한 {n.payment_deadline} · 공문 {won(n.total)}
                         {" · "}{n.received_at ? "수신 확인" : <span className="text-warning-ink">미수신</span>}
-                        {diff !== 0 && diff !== null && <b className="text-critical-ink"> · 차액 {diff > 0 ? "+" : ""}{won(diff)}</b>}</div></>
+                        {diff !== 0 && diff !== null && <b className="text-critical-ink"> · 차액 {diff > 0 ? "+" : ""}{won(diff)}</b>}
+                        {diff === null && <b className="text-warning-ink"> · 남은 입금 {won(n.total - d.amount)}</b>}</div></>
                       : <span className="text-xs text-ink-3">연결된 공문 없음</span>}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-1 items-center">{statusBadge(d)}
@@ -81,8 +90,10 @@ export function DepositsPage({ me, tab }: { me: Me | null; tab: Tab }) {
         )}
         <p className="mt-2 text-xs text-ink-3">'수동 처리 완료'는 분할·합산·금액 불일치 입금처럼 공문과 1:1로 맞지 않는 건을 닫을 때 씁니다 — 납부 기록은
           <a className="underline mx-1" href={href("payments", { tab: "loan" })}>상환 실적 관리</a>에서 직접 입력하세요.
-          '되돌리기'를 하면 승인으로 만든 납부 기록은 취소(이력 보존)되고 대기로 돌아갑니다.</p>
+          '되돌리기'를 하면 승인으로 만든 납부 기록은 취소(이력 보존)되고 대기로 돌아갑니다.
+          원금·이자를 나눠 보낸 <b>분할 입금</b>은 합계가 공문과 같아지면 자동으로 묶이며, 승인·되돌리기도 묶음 전체에 적용됩니다.</p>
       </Card>
+      {idents && <IdentsDialog writer={writer} onClose={() => setIdents(false)} onSaved={() => { setMsg("입금 식별정보를 저장했습니다. 다음 입금부터 이 정보로 기숙사를 알아봅니다."); reload(); }} />}
       {manual && <ManualDialog onClose={() => setManual(false)} onDone={(r) => { setManual(false); setMsg(resultText(r)); reload(); }} />}
       {act?.kind === "approve" && <ApproveDialog d={act.d} onClose={() => setAct(null)} onDone={() => done("승인했습니다 — 상환 실적에 납부 기록을 만들었습니다.")} />}
       {act?.kind === "assign" && <AssignDialog d={act.d} onClose={() => setAct(null)} onDone={() => done("공문을 지정했습니다. 확인사항을 보고 승인하세요.")} />}
@@ -95,22 +106,24 @@ export function DepositsPage({ me, tab }: { me: Me | null; tab: Tab }) {
 
 function resultText(r: DepositUploadResult): string {
   const parts = [`입금 ${r.added}건 등록 — 자동 승인 ${r.auto_completed}건, 대기 ${r.pending}건`];
+  if (r.grouped) parts.push(`분할 입금으로 묶인 건 ${r.grouped}건`);
   if (r.duplicates) parts.push(`이미 등록된 거래 ${r.duplicates}건은 건너뜀`);
   if (r.errors.length) parts.push(`읽지 못한 줄 ${r.errors.length}개: ${r.errors.slice(0, 3).map((e) => `${e.row ? `${e.row}행 ` : ""}${e.message}`).join(" / ")}`);
   return parts.join(" · ");
 }
 
-function UploadCard({ onDone, onManual, onError }: { onDone: (r: DepositUploadResult) => void; onManual: () => void; onError: (m: string) => void }) {
+function UploadCard({ onDone, onManual, onError, onIdents }: { onDone: (r: DepositUploadResult) => void; onManual: () => void; onError: (m: string) => void; onIdents: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(0);
   return (
-    <Card title="입금내역 올리기" actions={<div className="flex gap-2">
+    <Card title="입금내역 올리기" actions={<div className="flex flex-wrap gap-2">
+      <Button size="sm" onClick={onIdents}>기숙사별 입금 식별정보</Button>
       <Button size="sm" onClick={() => downloadFile("/deposits/template", {}, "입금내역_양식.xlsx").catch((e) => onError(e.message))}>입금내역 양식 내려받기</Button>
       <Button size="sm" onClick={onManual}>직접 입력</Button></div>}>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] items-end">
-        <Field label="거래내역 파일(.xlsx·.csv)">
-          <input key={key} type="file" accept=".xlsx,.csv" aria-label="입금내역 파일" className={inputCls}
+        <Field label="거래내역 파일(.xls·.xlsx·.csv)">
+          <input key={key} type="file" accept=".xls,.xlsx,.csv" aria-label="입금내역 파일" className={inputCls}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
         <Button variant="primary" disabled={!file || busy} onClick={async () => {
           if (!file) return;
@@ -120,8 +133,10 @@ function UploadCard({ onDone, onManual, onError }: { onDone: (r: DepositUploadRe
           finally { setBusy(false); }
         }}>{busy ? "대사 중…" : "올리고 공문과 맞추기"}</Button>
       </div>
-      <p className="mt-2 text-xs text-ink-3">기업뱅킹에서 내려받은 거래내역을 그대로 올려도 됩니다 — 열 이름이 입금일(거래일)·입금자명(보낸분)·입금액(맡기신금액)이면 읽고,
-        출금 줄은 건너뜁니다. 같은 거래를 다시 올리면 중복으로 건너뜁니다. 은행 파일 형식이 확정되면 그 형식에 맞춰 드립니다.</p>
+      <p className="mt-2 text-xs text-ink-3">은행 가상계좌(CMS)에서 내려받은 <b>.xls 파일을 그대로</b> 올리면 됩니다(거래일자·수납액·기재내역(입금인명)·가상계좌번호·고객KEY·고객명).
+        수납구분이 '입금'인 줄만 읽고, 같은 거래를 다시 올리면 중복으로 건너뜁니다.
+        은행 입금인명은 시스템 기숙사명과 달라도 됩니다 — <b>가상계좌번호 → 고객KEY → 입금인명</b> 순으로 기숙사를 알아보며,
+        처음 보는 입금은 '공문 지정' 또는 승인할 때 그 정보를 기숙사에 기억해 다음부터 자동으로 알아봅니다.</p>
     </Card>
   );
 }
@@ -229,6 +244,68 @@ function ReasonDialog({ kind, d, onClose, onDone }: { kind: keyof typeof REASON_
       <div className="mt-2"><DepositLine d={d} /></div>
       <p className="mt-2 text-xs text-ink-2">{k.help}</p>
       <Field label="사유" required className="mt-3"><input className={inputCls} aria-label="사유" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+      {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
+    </Modal>
+  );
+}
+
+function IdentsDialog({ writer, onClose, onSaved }: { writer: boolean; onClose: () => void; onSaved: () => void }) {
+  const { data, error, reload } = useAsync<DormIdent[]>(() => api.dormIdents(), []);
+  const [edit, setEdit] = useState<DormIdent | null>(null);
+  const [q, setQ] = useState("");
+  const rows = (data ?? []).filter((d) => !q.trim() || [d.dormitory_name, d.school_name, d.spc_name, d.customer_key, ...d.payer_names]
+    .some((x) => x && x.toLowerCase().includes(q.trim().toLowerCase())));
+  return (
+    <Modal wide title="기숙사별 입금 식별정보" onClose={onClose} footer={<Button onClick={onClose}>닫기</Button>}>
+      <p className="text-xs text-ink-2">은행 CMS의 가상계좌번호·고객KEY·입금인명으로 어느 기숙사의 입금인지 알아봅니다. 비어 있어도 담당자가 '공문 지정'·승인하면 자동으로 채워집니다.
+        가상계좌번호는 암호화해 저장합니다.</p>
+      <input className={`${inputCls} mt-3`} aria-label="기숙사 검색" placeholder="기숙사·학교·고객KEY·입금인명 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+      {error && <Notice tone="error">{error}</Notice>}
+      {!data ? <Loading /> : (
+        <div className="mt-3 max-h-[55vh] overflow-auto border border-line rounded-lg">
+          <table className="w-full text-sm" aria-label="입금 식별정보">
+            <thead><tr className="text-xs text-ink-2 bg-surface-2 sticky top-0">{["기숙사", "가상계좌번호", "고객KEY", "입금인명", ""].map((h, i) =>
+              <th key={i} scope="col" className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
+            <tbody>{rows.map((d) => (
+              <tr key={d.id} className="border-t border-line align-top">
+                <td className="px-3 py-2">{d.dormitory_name}<div className="text-[11px] text-ink-3">{[d.school_name, d.spc_name].filter(Boolean).join(" · ")}</div></td>
+                <td className="px-3 py-2 tabular whitespace-nowrap">{d.virtual_account_masked ?? <span className="text-ink-3">-</span>}</td>
+                <td className="px-3 py-2 tabular">{d.customer_key ?? <span className="text-ink-3">-</span>}</td>
+                <td className="px-3 py-2 text-xs">{d.payer_names.length ? d.payer_names.join(", ") : <span className="text-ink-3">-</span>}</td>
+                <td className="px-3 py-2 text-right">{writer && <Button size="sm" onClick={() => setEdit(d)}>수정</Button>}</td>
+              </tr>))}</tbody>
+          </table>
+        </div>)}
+      {edit && <IdentEdit d={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); reload(); onSaved(); }} />}
+    </Modal>
+  );
+}
+
+function IdentEdit({ d, onClose, onSaved }: { d: DormIdent; onClose: () => void; onSaved: () => void }) {
+  const [va, setVa] = useState(d.virtual_account ?? "");
+  const [ck, setCk] = useState(d.customer_key ?? "");
+  const [names, setNames] = useState(d.payer_names.join("\n"));
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal title={`입금 식별정보 수정 — ${d.dormitory_name}`} onClose={onClose} footer={<>
+      <Button onClick={onClose}>취소</Button>
+      <Button variant="primary" disabled={busy} onClick={async () => {
+        setBusy(true); setErr(null);
+        try {
+          await api.putDormIdent(d.id, { virtual_account: va.trim() || null, customer_key: ck.trim() || null,
+            payer_names: names.split(/\n|,/).map((x) => x.trim()).filter(Boolean).slice(0, 10) });
+          onSaved();
+        } catch (e) { setErr(e instanceof Error ? e.message : "저장하지 못했습니다."); } finally { setBusy(false); }
+      }}>{busy ? "저장 중…" : "저장"}</Button></>}>
+      <div className="grid gap-3">
+        <Field label="가상계좌번호" hint="은행 파일의 '가상계좌번호(상대계좌)' — 예: 000-000000-00-000">
+          <input className={inputCls} aria-label="가상계좌번호" value={va} onChange={(e) => setVa(e.target.value)} /></Field>
+        <Field label="고객KEY" hint="은행 파일의 '고객KEY' — 예: 68">
+          <input className={inputCls} aria-label="고객KEY" value={ck} onChange={(e) => setCk(e.target.value)} /></Field>
+        <Field label="입금인명(한 줄에 하나, 최대 10개)" hint="은행 파일의 '기재내역(입금인명)'·'고객명' — 끝의 -081 같은 번호는 무시하고 비교합니다">
+          <textarea className={`${inputCls} min-h-[90px]`} aria-label="입금인명" value={names} onChange={(e) => setNames(e.target.value)} /></Field>
+      </div>
       {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
     </Modal>
   );

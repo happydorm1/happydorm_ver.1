@@ -189,10 +189,10 @@ def list_notice_targets(as_of: date | None = None, date_from: date | None = None
 
 @router.get("/notices/issued")
 def list_notices_issued(date_from: date | None = None, date_to: date | None = None, received: bool | None = None,
-                        dormitory_id: uuid.UUID | None = None, db: Session = Depends(get_db),
+                        dormitory_id: uuid.UUID | None = None, paid: str | None = None, db: Session = Depends(get_db),
                         current_user: User = Depends(get_current_user)):
     """발송완료 — 기숙사·상환예정일별 최근 발급본과 수신 확인 여부(SPC 담당자는 자기 기숙사만)."""
-    return notices_issued(db, current_user, date_from=date_from, date_to=date_to, received=received, dormitory_id=dormitory_id)
+    return notices_issued(db, current_user, date_from=date_from, date_to=date_to, received=received, dormitory_id=dormitory_id, paid=paid)
 
 
 

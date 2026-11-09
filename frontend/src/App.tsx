@@ -69,7 +69,7 @@ export default function App() {
     page = <PaymentsPage me={me} asOf={asOf} tab={route.query.get("tab") === "loan" ? "loan" : "overdue"} loanId={route.query.get("loan") ?? undefined} />;
   } else if (section === "notices") {
     if (sub === "targets") { title = "안내공문 · 발송대상 현황"; page = <NoticeTargetsPage me={me} asOf={asOf} />; }
-    else if (sub === "issued") { title = "안내공문 · 발송완료"; page = <NoticeIssuedPage me={me} asOf={asOf} />; }
+    else if (sub === "issued") { title = "안내공문 · 발송완료"; page = <NoticeIssuedPage me={me} asOf={asOf} remindId={route.query.get("remind") ?? undefined} />; }
     else {
       title = "안내공문 · 공문 작성·발급";
       page = <NoticesPage me={me} asOf={asOf} tab={route.query.get("tab") === "templates" ? "templates" : "issue"}

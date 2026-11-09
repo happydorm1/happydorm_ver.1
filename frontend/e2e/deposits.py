@@ -6,6 +6,7 @@
 """
 import datetime as dt
 import json
+import re
 import sys
 import tempfile
 import urllib.parse
@@ -69,6 +70,21 @@ total = notice["generated_data"]["totals"]["total"]
 dname = notice["generated_data"]["dormitory"]["name"]
 over = total >= 20_000_000
 
+# 분할 입금(원금·이자 따로) 확인용 — 다른 기숙사 공문
+t2 = next((ln for ln in dash["loans"] if ln.get("next_due_date") and ln["next_due_date"] >= TODAY.isoformat()
+           and ln["status"] == "ACTIVE" and ln["dormitory_id"] != target["dormitory_id"]), None)
+assert t2, "분할 입금용 두 번째 기숙사 없음"
+n2 = api(f"/dormitories/{t2['dormitory_id']}/notices", tok, body={"due_date": t2["next_due_date"]})
+t2tot = n2["generated_data"]["totals"]
+d2name = n2["generated_data"]["dormitory"]["name"]
+ckey = str(900 + uuid.uuid4().int % 99)
+
+# 납부기한이 지난 미납 회차에도 공문 발급 + 수신처 등록(독촉 메일 확인용)
+od = dash["alerts"]["overdue"]["items"][0]
+od_dorm = od.get("dormitory_id") or next(x["dormitory_id"] for x in dash["loans"] if x["loan_id"] == od["loan_id"])
+api(f"/dormitories/{od_dorm}/notices", tok, body={"due_date": od["due_date"]})
+api(f"/dormitories/{od_dorm}/contacts", tok, body={"name": "연체담당", "email": "e2e-overdue@example.com", "is_primary": True})
+
 tmp = Path(tempfile.mkdtemp())
 wb = Workbook()
 ws = wb.active
@@ -93,6 +109,7 @@ with sync_playwright() as p:
     page = b.new_page(viewport={"width": 1500, "height": 950}, accept_downloads=True)
     page.on("pageerror", lambda e: errors.append(str(e)))
     login(page, "demo-admin@example.com")
+    expect(page.get_by_role("region", name="납부기한 임박 미입금")).to_be_visible()      # 대시보드 패널(재단)
     page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="입금 확인·승인").click()
     expect(page.get_by_role("main").get_by_role("heading", name="입금 확인·승인")).to_be_visible()
     with page.expect_download() as d:
@@ -142,6 +159,40 @@ with sync_playwright() as p:
     row = next(r for r in summ["rows"] if r["due_date"] == target["next_due_date"])
     assert row["paid_total"] > 0, row
 
+    # 발송완료: 진행 단계 요약 카드 → '기한 경과 미입금' → 독촉 메일(받는 사람 선택 + 독촉 본문)
+    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="발송완료").click()
+    page.get_by_label("기간 시작").fill("")
+    page.get_by_role("button", name="조회").click()
+    cards = page.get_by_role("region", name="진행 단계 요약")
+    expect(cards.get_by_role("button", name=re.compile("기한 경과 미입금"))).to_contain_text("1건")
+    cards.get_by_role("button", name=re.compile("기한 경과 미입금")).click()
+    otbl = page.get_by_role("table", name="발송완료 목록")
+    expect(otbl.locator("tbody tr")).to_have_count(1)
+    orow = otbl.locator("tbody tr").first
+    expect(orow).to_contain_text("기한 경과")
+    expect(orow.get_by_role("list", name="진행 단계")).to_be_visible()
+    orow.get_by_role("button", name="독촉 메일").click()
+    md = page.get_by_role("dialog", name="독촉 메일 작성 — 받는 사람 선택")
+    expect(md).to_contain_text("[납부기한 경과]")
+    expect(md).to_contain_text("납부기한")
+    link = md.get_by_role("link", name=re.compile("메일 프로그램 열기"))
+    assert "e2e-overdue@example.com" in link.get_attribute("href")
+    shot(page, "dep04_remind")
+    md.get_by_role("button", name="닫기").click()
+
+    # 발송완료 목록: 입금확인·입금일시
+    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="발송완료").click()
+    page.get_by_label("기간 시작").fill("")
+    page.get_by_label("입금 상태").select_option("PAID")
+    page.get_by_role("button", name="조회").click()
+    page.get_by_role("region", name="진행 단계 요약").get_by_role("button", name=re.compile("발급 전체")).click()
+    irow = page.get_by_role("table", name="발송완료 목록").locator("tbody tr", has_text=dname)
+    expect(irow).to_contain_text("입금 완료")
+    expect(irow).to_contain_text(f"{TODAY.isoformat()} 10:21")
+    shot(page, "dep03_issued")
+    page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name="입금 확인·승인").click()
+    page.get_by_role("tab", name="완료", exact=False).first.click()
+
     # 되돌리기 → 대기, 납부 기록 취소
     done_row.get_by_role("button", name="되돌리기").click()
     rv = page.get_by_role("dialog", name="되돌리기")
@@ -150,6 +201,45 @@ with sync_playwright() as p:
     expect(page.get_by_text("대기로 되돌렸습니다")).to_be_visible()
     summ = api(f"/loans/{target['loan_id']}/payments/summary", tok, params={"as_of": TODAY.isoformat()})
     assert next(r for r in summ["rows"] if r["due_date"] == target["next_due_date"])["paid_total"] == 0
+
+    # 기숙사별 입금 식별정보: 고객KEY 등록 → 은행 CMS 양식(원금·이자 두 줄, 입금인명은 시스템 이름과 다름) → 분할 묶음
+    page.get_by_role("button", name="기숙사별 입금 식별정보").click()
+    idl = page.get_by_role("dialog", name="기숙사별 입금 식별정보")
+    idl.get_by_label("기숙사 검색").fill(d2name)
+    idl.get_by_role("table", name="입금 식별정보").locator("tr", has_text=d2name).first.get_by_role("button", name="수정").click()
+    ed = page.get_by_role("dialog", name=re.compile("입금 식별정보 수정"))
+    ed.get_by_label("고객KEY").fill(ckey)
+    ed.get_by_role("button", name="저장").click()
+    expect(idl.get_by_role("table", name="입금 식별정보").locator("tr", has_text=d2name).first).to_contain_text(ckey)
+    shot(page, "dep05_idents")
+    idl.get_by_role("button", name="닫기").last.click()
+    cms = Workbook()
+    cs = cms.active
+    cs.append(["거래일자", "거래시간", "가상계좌번호(상대계좌)", "입금종류", "수납구분", "수납액", "출금액", "잔액",
+               "기재내역(입금인명)", "고객KEY", "고객명", "거래번호", "비고", "취소원거래번호", "취소원거래일"])
+    payer = f"은행표기{uuid.uuid4().hex[:4]}-084"
+    cs.append([TODAY.isoformat(), "13:42:08", "", "인터넷", "입금", t2tot["interest"], 0, 1, payer, ckey, "약칭", 4, "", "", ""])
+    cs.append([TODAY.isoformat(), "13:47:06", "", "인터넷", "입금", t2tot["principal"], 0, 2, payer, ckey, "약칭", 5, "", "", ""])
+    cpath = tmp / "cms.xlsx"
+    cms.save(cpath)
+    page.get_by_role("tab", name="대기", exact=False).first.click()
+    page.get_by_label("입금내역 파일").set_input_files(str(cpath))
+    page.get_by_role("button", name="올리고 공문과 맞추기").click()
+    expect(page.get_by_text("분할 입금으로 묶인 건 2건")).to_be_visible()
+    tbl = page.get_by_role("table", name="입금내역")
+    split_rows = tbl.locator("tr", has_text=payer)
+    if t2tot["total"] >= 20_000_000:
+        expect(split_rows).to_have_count(2)
+        expect(split_rows.first).to_contain_text(f"→ {d2name}")
+        expect(split_rows.first).to_contain_text("분할 2건 합계")
+        expect(split_rows.first).to_contain_text(f"고객KEY {ckey}")
+        shot(page, "dep06_split")
+        split_rows.first.get_by_role("button", name="승인").click()
+        page.get_by_role("dialog", name="입금 승인").get_by_role("button", name="예, 승인합니다").click()
+        expect(page.get_by_text("승인했습니다")).to_be_visible()
+        expect(tbl.locator("tr", has_text=payer)).to_have_count(0)
+    summ = api(f"/loans/{t2['loan_id']}/payments/summary", tok, params={"as_of": TODAY.isoformat()})
+    assert next(r for r in summ["rows"] if r["due_date"] == t2["next_due_date"])["paid_total"] == t2tot["total"]
 
     page.set_viewport_size({"width": 390, "height": 800})
     page.goto(BASE + "/#/deposits")

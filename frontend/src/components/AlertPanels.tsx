@@ -119,6 +119,18 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
     </Panel>
   );
 
+  const soonTitle = "납부기한 임박 미입금";
+  const soon = notices.scope === "FOUNDATION" && notices.due_soon_unpaid && (
+    <Panel key="soon" title={soonTitle} count={notices.due_soon_unpaid.count} tone="critical" icon="⏰"
+      empty={`납부기한 영업일 D-${notices.due_soon_unpaid.days} 이내 미입금 공문이 없습니다.`}>
+      <More title={soonTitle} items={notices.due_soon_unpaid.items} render={(x) => (
+        <NoticeLine key={x.notice_id} x={x} right={<a href={`#/notices/issued?remind=${x.notice_id}`}
+          className="rounded border border-critical px-1.5 text-[11px] text-critical-ink hover:bg-surface-2">D-{x.days_left} · 독촉 메일</a>} />
+      )} />
+      <p className="text-[11px] text-ink-3 pt-1">발급한 공문의 납부기한이 영업일 D-{notices.due_soon_unpaid.days} 이내인데 입금(확인 중 포함)·납부 기록이 없는 기숙사입니다.</p>
+    </Panel>
+  );
+
   async function download(x: NoticeStatusItem) {
     setErr(null);
     try { await downloadFile(`/notices/${x.notice_id}/download`, { format: "xlsx" }, `${x.title}.xlsx`); onChanged(); }
@@ -188,7 +200,7 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
     // 관리자·자금담당자: 안내공문(발송예정·미수신) 한 줄 + 금리변동·미납·확인필요 한 줄
     return (
       <div className="space-y-3">
-        <div className="grid gap-3 grid-cols-1 md:grid-cols-2" aria-label="안내공문 현황">{upcoming}{unreceived}</div>
+        <div className={`grid gap-3 grid-cols-1 md:grid-cols-2 ${soon ? "xl:grid-cols-3" : ""}`} aria-label="안내공문 현황">{upcoming}{unreceived}{soon}</div>
         <div className="grid gap-3 grid-cols-1 md:grid-cols-3">{rate}{overdue}{check}</div>
       </div>
     );

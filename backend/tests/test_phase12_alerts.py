@@ -140,7 +140,7 @@ def test_repayment_notifications_business_days_dedup_and_catchup():
     assert _inbox(other_spc_h, loan_id) == []                # 다른 SPC 담당자에게는 가지 않는다
 
     # ---- 2) 같은 날 다시 실행해도 중복 없음
-    assert _scan(h, as_of, dorm_id)["created"] == {"repayment": 0, "rate_change": 0}
+    assert _scan(h, as_of, dorm_id)["created"] == {"repayment": 0, "rate_change": 0, "unpaid_due_soon": 0}
 
     # ---- 3) 읽음 처리: 내 알림만
     nid = _inbox(spc_h, loan_id)[0]["id"]

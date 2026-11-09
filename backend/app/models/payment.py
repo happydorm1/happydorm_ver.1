@@ -55,6 +55,7 @@ class BankDeposit(Base, AuditMixin):
     __tablename__ = "bank_deposit"
 
     deposit_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    deposit_time: Mapped[str | None] = mapped_column(String(8), nullable=True)   # 은행 파일에 거래시각이 있으면 HH:MM:SS
     depositor: Mapped[str] = mapped_column(String(100), nullable=False)
     amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
     bank_memo: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -62,6 +63,12 @@ class BankDeposit(Base, AuditMixin):
     file_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     dup_key: Mapped[str] = mapped_column(String(400), nullable=False, index=True)          # 같은 거래 중복 업로드 방지
     notice_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("generated_document.id"), nullable=True, index=True)
+    # 가상계좌(CMS) 입금내역의 식별정보 — 기숙사를 알아보는 데 쓴다
+    virtual_account: Mapped[str | None] = mapped_column(String(400), nullable=True)      # 암호화 저장
+    customer_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    dormitory_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)   # 알아본 기숙사
+    group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)       # 분할 입금 묶음(원금·이자 따로 등)
     status: Mapped[DepositStatus] = mapped_column(Enum(DepositStatus), default=DepositStatus.PENDING, nullable=False, index=True)
     hold_reasons: Mapped[list | None] = mapped_column(JSONB, nullable=True)                # 대기 사유 코드
     auto_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

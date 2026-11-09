@@ -158,6 +158,21 @@ export function NoticePreview({ d, actions }: { d: NoticeData; actions?: React.R
   );
 }
 
+/** 독촉(납부 안내) 메일 본문 — 납부기한 임박·경과 미입금 */
+function reminderBody(n: NoticeT, overdue: boolean): string {
+  const g = n.generated_data, t = g.totals;
+  return [
+    `${g.dormitory.name} 담당자님께,`, "",
+    overdue
+      ? `${n.title}의 납부기한(${n.payment_deadline})이 지났으나 아직 입금이 확인되지 않아 다시 안내드립니다.`
+      : `${n.title}의 납부기한(${n.payment_deadline})이 다가왔으나 아직 입금이 확인되지 않아 안내드립니다.`, "",
+    `- 납부기한: ${n.payment_deadline}`,
+    `- 납부금액: ${won(t.total)} (원금 ${won(t.principal)}, 이자 ${won(t.interest)})`,
+    `- 입금계좌: ${g.account.bank_account} (${g.account.account_holder})`, "",
+    "이미 입금하셨다면 이 메일은 무시해 주십시오. 문의 사항은 회신 바랍니다.", "",
+  ].join("\r\n");
+}
+
 /** 메일 본문(받는 사람과 무관) */
 function mailBody(n: NoticeT): string {
   const g = n.generated_data, t = g.totals;
@@ -173,12 +188,15 @@ function mailBody(n: NoticeT): string {
 }
 
 /** 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 연다. 공문 파일은 내려받아 직접 첨부한다. */
-function mailtoFor(n: NoticeT, to: string[]): string {
-  return `mailto:${to.join(",")}?subject=${encodeURIComponent(n.title)}&body=${encodeURIComponent(mailBody(n))}`;
+function mailtoFor(n: NoticeT, to: string[], subject = n.title, body = mailBody(n)): string {
+  return `mailto:${to.join(",")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-/** 메일 작성 — 받는 사람을 체크해 고른다(기본 수신처가 미리 체크됨). 실제 발송은 PC의 메일 프로그램에서. */
-function MailDialog({ n, contacts, onClose }: { n: NoticeT; contacts: Contact[]; onClose: () => void }) {
+/** 메일 작성 — 받는 사람을 체크해 고른다(기본 수신처가 미리 체크됨). 실제 발송은 PC의 메일 프로그램에서.
+ *  reminder: 납부기한 임박·경과 미입금 독촉 메일(제목 앞 [납부 안내]/[납부기한 경과]) */
+export function MailDialog({ n, contacts, onClose, reminder }: { n: NoticeT; contacts: Contact[]; onClose: () => void; reminder?: "soon" | "overdue" }) {
+  const subject = reminder ? `[${reminder === "overdue" ? "납부기한 경과" : "납부 안내"}] ${n.title}` : n.title;
+  const body = reminder ? reminderBody(n, reminder === "overdue") : mailBody(n);
   const withMail = contacts.filter((c) => c.email);
   const hasPrimary = withMail.some((c) => c.is_primary);
   const [sel, setSel] = useState<Set<string>>(() => new Set(withMail.filter((c) => !hasPrimary || c.is_primary).map((c) => c.id)));
@@ -187,15 +205,16 @@ function MailDialog({ n, contacts, onClose }: { n: NoticeT; contacts: Contact[];
   const copy = (label: string, text: string) => navigator.clipboard?.writeText(text).then(() => setCopied(label), () => setCopied(null));
   const toggle = (id: string) => setSel((p) => { const x = new Set(p); if (x.has(id)) x.delete(id); else x.add(id); return x; });
   return (
-    <Modal wide title="메일 작성 — 받는 사람 선택" onClose={onClose} footer={<>
+    <Modal wide title={reminder ? "독촉 메일 작성 — 받는 사람 선택" : "메일 작성 — 받는 사람 선택"} onClose={onClose} footer={<>
       <Button onClick={onClose}>닫기</Button>
       <Button disabled={!to.length} onClick={() => copy("받는 사람", to.join("; "))}>받는 사람 복사</Button>
-      <Button onClick={() => copy("제목·본문", `${n.title}\n\n${mailBody(n)}`)}>제목·본문 복사</Button>
+      <Button onClick={() => copy("제목·본문", `${subject}\n\n${body}`)}>제목·본문 복사</Button>
       {to.length
-        ? <a href={mailtoFor(n, to)} onClick={() => setTimeout(onClose, 300)}
+        ? <a href={mailtoFor(n, to, subject, body)} onClick={() => setTimeout(onClose, 300)}
             className="inline-flex items-center rounded-md bg-brand text-brand-ink px-3 py-1.5 text-sm font-medium">메일 프로그램 열기 ({to.length}명)</a>
         : <Button variant="primary" disabled>메일 프로그램 열기</Button>}</>}>
-      <p className="text-sm font-medium">{n.title}</p>
+      <p className="text-sm font-medium">{subject}</p>
+      {reminder && <pre className="mt-2 whitespace-pre-wrap text-xs bg-surface-2 rounded-lg p-2 max-h-40 overflow-y-auto font-sans">{body}</pre>}
       <ul className="mt-3 divide-y divide-line border border-line rounded-lg" aria-label="받는 사람">
         {contacts.map((c) => (
           <li key={c.id} className="px-3 py-2">
@@ -266,7 +285,7 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
   );
 }
 
-const RECEIVED_VIA: Record<string, string> = { VIEW: "열람", DOWNLOAD: "내려받기", NOTIFICATION: "알림 확인" };
+const RECEIVED_VIA: Record<string, string> = { VIEW: "열람", DOWNLOAD: "내려받기", NOTIFICATION: "알림 확인", DEPOSIT: "입금 확인으로 수신" };
 
 function Templates() {
   const { data, error, reload } = useAsync<Template[]>(() => api.templates(), []);

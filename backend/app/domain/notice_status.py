@@ -44,6 +44,74 @@ def _latest_docs(db: Session, dorm_ids: set, since: date | None = None) -> dict[
     return out
 
 
+DUE_SOON_DAYS = 3   # 납부기한 영업일 D-3 이내인데 입금이 없으면 '납부기한 임박 미입금'
+
+
+def payment_states(db: Session, docs: dict, as_of: date | None = None) -> dict:
+    """
+    발송완료 공문별 입금(상환) 상태 — {(기숙사, 상환예정일): {...}}.
+    1) 입금 확인·승인에서 완료된 입금 → PAID(입금일·시각, 자동 승인/승인/수동 처리)
+    2) 입금 기록은 없지만 상환 실적 관리에 공문 금액만큼 납부 기록이 있음 → PAID(실적 입력)
+    3) 연결된 대기 입금 → CHECKING(확인 중)
+    4) 일부만 납부 → PARTIAL / 그 밖에 납부기한 전 → UNPAID, 지남 → OVERDUE
+    재발급한 공문이어도 같은 기숙사·상환예정일의 입금이면 이어서 본다.
+    """
+    from app.models.payment import ActualPayment, BankDeposit, DepositStatus, PaymentStatus
+    out: dict = {}
+    if not docs:
+        return out
+    keys = set(docs)
+    deps = db.execute(
+        select(BankDeposit, GeneratedDocument.dormitory_id, GeneratedDocument.due_date)
+        .join(GeneratedDocument, GeneratedDocument.id == BankDeposit.notice_id)
+        .where(BankDeposit.is_deleted.is_(False), BankDeposit.status != DepositStatus.EXCLUDED,
+               GeneratedDocument.dormitory_id.in_({k[0] for k in keys}))
+        .order_by(BankDeposit.deposit_date.desc())).all()
+    by_key: dict = {}
+    for dep, did, due in deps:
+        if (did, due) in keys:
+            by_key.setdefault((did, due), []).append(dep)
+    loan_ids = {uuid.UUID(s["loan_id"]) for d in docs.values() for s in (d.generated_data or {}).get("sources", [])}
+    paid: dict = {}
+    if loan_ids:
+        for p in db.execute(select(ActualPayment).where(ActualPayment.loan_id.in_(loan_ids),
+                                                        ActualPayment.status == PaymentStatus.ACTIVE)).scalars():
+            slot = paid.setdefault((p.loan_id, p.due_date), [0, None])
+            slot[0] += p.actual_principal + p.actual_interest
+            slot[1] = p.actual_paid_date if slot[1] is None else max(slot[1], p.actual_paid_date)
+    from app.domain.calendar_service import load_holidays
+    from app.engine.business_day import count_business_days
+    today = as_of or date.today()
+    holidays = load_holidays(db)
+    for k, doc in docs.items():
+        gd = doc.generated_data or {}
+        done = [d for d in by_key.get(k, []) if d.status == DepositStatus.COMPLETED]
+        waiting = [d for d in by_key.get(k, []) if d.status == DepositStatus.PENDING]
+        if done:
+            d = done[0]
+            out[k] = {"pay_status": "PAID", "paid_date": d.deposit_date, "paid_time": d.deposit_time,
+                      "pay_via": "MANUAL" if d.manual_done else ("AUTO" if d.auto_approved else "APPROVED")}
+            continue
+        lines = list(zip(gd.get("sources", []), gd.get("payments", [])))
+        got = [paid.get((uuid.UUID(s["loan_id"]), doc.due_date), [0, None]) for s, _ in lines]
+        need = [ln["total"] for _, ln in lines]
+        last = max((g[1] for g in got if g[1]), default=None)
+        if lines and all(g[0] >= n for g, n in zip(got, need)):
+            out[k] = {"pay_status": "PAID", "paid_date": last, "paid_time": None, "pay_via": "PAYMENT"}
+        elif waiting:
+            out[k] = {"pay_status": "CHECKING", "paid_date": waiting[0].deposit_date, "paid_time": waiting[0].deposit_time, "pay_via": None}
+        elif any(g[0] > 0 for g in got):
+            out[k] = {"pay_status": "PARTIAL", "paid_date": last, "paid_time": None, "pay_via": "PAYMENT"}
+        else:
+            out[k] = {"pay_status": "OVERDUE" if today > doc.payment_deadline else "UNPAID", "paid_date": None, "paid_time": None, "pay_via": None}
+        st = out[k]
+        open_ = st["pay_status"] in ("UNPAID", "PARTIAL", "OVERDUE")
+        st["overdue"] = open_ and today > doc.payment_deadline
+        st["days_left"] = count_business_days(today, doc.payment_deadline, holidays) if today <= doc.payment_deadline else None
+        st["due_soon"] = open_ and not st["overdue"] and st["days_left"] is not None and st["days_left"] <= DUE_SOON_DAYS
+    return out
+
+
 def _item(doc: GeneratedDocument, dorm: Dormitory, names: dict) -> dict:
     t = (doc.generated_data or {}).get("totals") or {}
     return {"notice_id": doc.id, "dormitory_id": dorm.id, "dormitory_name": dorm.dormitory_name, "school_name": dorm.school_name,
@@ -74,7 +142,11 @@ def build_notice_status(db: Session, user: User, as_of: date, dorms: dict, upcom
         pending = sorted((_item(d, dorms[k[0]], names) for k, d in docs.items()
                           if d.received_at is None and d.payment_deadline >= as_of),
                          key=lambda i: (i["payment_deadline"], i["dormitory_name"]))
-        return {"scope": "FOUNDATION", "unreceived": {"count": len(pending), "items": pending}}
+        pay = payment_states(db, docs, as_of=as_of)
+        soon = sorted((_item(d, dorms[k[0]], names) | pay[k] for k, d in docs.items() if pay.get(k, {}).get("due_soon")),
+                      key=lambda i: (i["payment_deadline"], i["dormitory_name"]))
+        return {"scope": "FOUNDATION", "unreceived": {"count": len(pending), "items": pending},
+                "due_soon_unpaid": {"count": len(soon), "items": soon, "days": DUE_SOON_DAYS}}
     return {"scope": "NONE"}
 
 
@@ -139,7 +211,7 @@ def notice_targets(db: Session, user: User, as_of: date, *, date_from: date | No
 
 
 def notices_issued(db: Session, user: User, *, date_from: date | None = None, date_to: date | None = None,
-                   received: bool | None = None, dormitory_id: uuid.UUID | None = None) -> dict:
+                   received: bool | None = None, dormitory_id: uuid.UUID | None = None, paid: str | None = None) -> dict:
     """발송완료: 기숙사·상환예정일별 가장 최근 발급본(상환예정일 기준 기간), 수신 확인 여부 포함."""
     q = select(Dormitory).where(Dormitory.is_deleted.is_(False))
     if user.role == UserRole.SPC_MANAGER:
@@ -150,12 +222,17 @@ def notices_issued(db: Session, user: User, *, date_from: date | None = None, da
     docs = _latest_docs(db, set(dorms))
     uids = {d.received_by for d in docs.values() if d.received_by}
     names = {u.id: u.name for u in db.execute(select(User).where(User.id.in_(uids))).scalars()} if uids else {}
+    docs = {k: d for k, d in docs.items() if not ((date_from and k[1] < date_from) or (date_to and k[1] > date_to))}
+    pay = payment_states(db, docs)
     items = []
     for (did, due), doc in docs.items():
-        if (date_from and due < date_from) or (date_to and due > date_to):
-            continue
         if received is not None and (doc.received_at is not None) != received:
             continue
-        items.append(_item(doc, dorms[did], names))
+        st = pay.get((did, due), {})
+        # paid 필터: PAID(입금 완료) / CHECKING(확인 중) / UNPAID(미입금 — 일부납부·기한 경과 포함)
+        if paid and not (st.get("pay_status") == paid or (paid == "UNPAID" and st.get("pay_status") in ("UNPAID", "OVERDUE", "PARTIAL"))):
+            continue
+        items.append(_item(doc, dorms[did], names) | st)
     items.sort(key=lambda i: (-i["due_date"].toordinal(), i["dormitory_name"]))
-    return {"count": len(items), "unreceived": sum(1 for i in items if not i["received"]), "items": items}
+    return {"count": len(items), "unreceived": sum(1 for i in items if not i["received"]),
+            "unpaid": sum(1 for i in items if i.get("pay_status") in ("UNPAID", "OVERDUE", "PARTIAL")), "items": items}

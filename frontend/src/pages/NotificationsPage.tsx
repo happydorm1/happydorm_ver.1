@@ -8,6 +8,7 @@ import { href } from "../lib/router";
 const TYPE: Record<string, { label: string; tone: "warning" | "critical" | "brand" }> = {
   RATE_CHANGE_D30: { label: "금리변동", tone: "warning" },
   NOTICE_ISSUED: { label: "공문 발급", tone: "brand" },
+  UNPAID_D3: { label: "미입금 임박", tone: "critical" },
 };
 const label = (t: string) => TYPE[t] ?? (t.startsWith("REPAYMENT_D") ? { label: `상환 D-${t.slice(11)}`, tone: "brand" as const } : { label: t, tone: "brand" as const });
 
@@ -23,8 +24,8 @@ export function NotificationsPage({ me, asOf }: { me: Me | null; asOf: string })
       <PageHeader title="알림" sub="매일 아침 배치가 상환일(영업일 D-15·10·5·3·1)과 금리변동(영업일 D-30) 알림을 만듭니다."
         actions={<>
           {canWrite(me) && <Button onClick={() => api.scanNotifications(asOf).then((r) => {
-            const c = (r.created ?? {}) as { repayment?: number; rate_change?: number };
-            setMsg(`기준일 ${asOf}로 알림을 점검했습니다 — 새 알림: 상환 ${c.repayment ?? 0}건, 금리변동 ${c.rate_change ?? 0}건(이미 만든 알림은 다시 만들지 않습니다).`); reload();
+            const c = (r.created ?? {}) as { repayment?: number; rate_change?: number; unpaid_due_soon?: number };
+            setMsg(`기준일 ${asOf}로 알림을 점검했습니다 — 새 알림: 상환 ${c.repayment ?? 0}건, 금리변동 ${c.rate_change ?? 0}건, 미입금 임박 ${c.unpaid_due_soon ?? 0}건(이미 만든 알림은 다시 만들지 않습니다).`); reload();
           }, (e) => setErr(e.message))}>지금 알림 점검</Button>}
           <Button disabled={!count} onClick={() => api.readAll().then(() => reload(), (e) => setErr(e.message))}>모두 읽음</Button>
         </>} />

@@ -40,6 +40,12 @@ class AssignIn(BaseModel):
     notice_id: uuid.UUID | None = None
 
 
+class IdentIn(BaseModel):
+    virtual_account: str | None = Field(default=None, max_length=40)
+    customer_key: str | None = Field(default=None, max_length=50)
+    payer_names: list[str] = Field(default_factory=list, max_length=10)
+
+
 def _notice_dict(db: Session, doc: GeneratedDocument | None) -> dict | None:
     if doc is None:
         return None
@@ -55,8 +61,14 @@ def _notice_dict(db: Session, doc: GeneratedDocument | None) -> dict | None:
 
 def _out(db: Session, d: BankDeposit) -> dict:
     who = db.get(User, d.decided_by) if d.decided_by else None
+    dorm = db.get(Dormitory, d.dormitory_id) if d.dormitory_id else None
+    group = svc._members(db, d) if d.group_id else []
     return {
-        "id": str(d.id), "deposit_date": d.deposit_date.isoformat(), "depositor": d.depositor, "amount": d.amount,
+        "customer_name": d.customer_name, "customer_key": d.customer_key, "virtual_account": svc.mask_account(d.virtual_account),
+        "dormitory": {"id": str(dorm.id), "name": dorm.dormitory_name} if dorm else None,
+        "group": {"id": str(d.group_id), "count": len(group), "total": sum(m.amount for m in group),
+                  "amounts": [m.amount for m in group]} if d.group_id else None,
+        "id": str(d.id), "deposit_date": d.deposit_date.isoformat(), "deposit_time": d.deposit_time, "depositor": d.depositor, "amount": d.amount,
         "bank_memo": d.bank_memo, "source": d.source, "file_name": d.file_name, "status": d.status.value,
         "hold_reasons": [{"code": c, "label": svc.REASONS.get(c, c)} for c in (d.hold_reasons or [])],
         "auto_approved": d.auto_approved, "manual_done": d.manual_done,
@@ -89,6 +101,49 @@ def list_deposits(status: DepositStatus | None = None, date_from: date | None = 
                              .group_by(BankDeposit.status)).all())
     return {"items": [_out(db, d) for d in items], "counts": {s.value: counts.get(s, 0) for s in DepositStatus},
             "auto_approve_limit": svc.AUTO_APPROVE_LIMIT}
+
+
+@router.get("/dorm-idents")
+def dorm_idents(db: Session = Depends(get_db), user: User = Depends(READ)):
+    """기숙사별 입금 식별정보 — 은행 가상계좌(CMS)의 가상계좌번호·고객KEY·입금인명."""
+    from app.core.crypto import decrypt_str
+    from app.models.organization import SPC
+    dorms = db.execute(select(Dormitory).where(Dormitory.is_deleted.is_(False)).order_by(Dormitory.dormitory_name)).scalars().all()
+    out = []
+    for d in dorms:
+        spc = db.get(SPC, d.spc_id) if d.spc_id else None
+        out.append({"id": str(d.id), "dormitory_name": d.dormitory_name, "school_name": d.school_name,
+                    "spc_name": spc.spc_name if spc else None,
+                    "virtual_account": decrypt_str(d.bank_virtual_account) if user.role in (UserRole.SYSTEM_ADMIN, UserRole.FOUNDATION_FUND_MANAGER) else svc.mask_account(d.bank_virtual_account),
+                    "virtual_account_masked": svc.mask_account(d.bank_virtual_account),
+                    "customer_key": d.bank_customer_key, "payer_names": d.bank_payer_names or []})
+    return out
+
+
+@router.put("/dorm-idents/{dormitory_id}")
+def put_dorm_ident(dormitory_id: uuid.UUID, payload: IdentIn, db: Session = Depends(get_db), user: User = Depends(WRITE)):
+    from app.core.crypto import encrypt_str
+    from app.domain.audit import record_audit
+    d = db.get(Dormitory, dormitory_id)
+    if d is None or d.is_deleted:
+        raise HTTPException(status_code=404, detail="기숙사를 찾을 수 없습니다.")
+    va = (payload.virtual_account or "").strip()
+    ck = (payload.customer_key or "").strip()
+    names = [n.strip() for n in payload.payer_names if n and n.strip()]
+    # 다른 기숙사와 겹치면 어느 기숙사 입금인지 알 수 없으므로 막는다
+    from app.core.crypto import decrypt_str
+    for o in db.execute(select(Dormitory).where(Dormitory.is_deleted.is_(False), Dormitory.id != d.id)).scalars():
+        if va and o.bank_virtual_account and svc._acct(decrypt_str(o.bank_virtual_account)) == svc._acct(va):
+            raise HTTPException(status_code=422, detail=f"가상계좌번호가 '{o.dormitory_name}'에 이미 등록돼 있습니다.")
+        if ck and o.bank_customer_key == ck:
+            raise HTTPException(status_code=422, detail=f"고객KEY가 '{o.dormitory_name}'에 이미 등록돼 있습니다.")
+    d.bank_virtual_account = encrypt_str(va) if va else None
+    d.bank_customer_key = ck or None
+    d.bank_payer_names = names or None
+    record_audit(db, table_name="dormitory", record_id=d.id, loan_id=None, action="UPDATE", user_id=user.id,
+                 field="bank_ident", after=f"고객KEY {ck or '-'} · 입금인명 {', '.join(names) or '-'} · 가상계좌 {'등록' if va else '-'}")
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/template")

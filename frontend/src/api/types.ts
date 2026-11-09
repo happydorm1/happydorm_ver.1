@@ -290,10 +290,15 @@ export interface MigrationBatch {
 export interface NoticeStatusItem {
   notice_id: Id; dormitory_id: Id; dormitory_name: string; school_name: string; title: string; due_date: string;
   payment_deadline: string; issued_at: string; total: number | null; received: boolean; received_at: string | null;
-  received_by_name: string | null; received_via: "VIEW" | "DOWNLOAD" | "NOTIFICATION" | null;
+  received_by_name: string | null; received_via: "VIEW" | "DOWNLOAD" | "NOTIFICATION" | "DEPOSIT" | null;
+  // 발송완료 목록의 입금(상환) 상태(Phase 23)
+  pay_status?: "PAID" | "CHECKING" | "PARTIAL" | "UNPAID" | "OVERDUE"; paid_date?: string | null; paid_time?: string | null;
+  pay_via?: "AUTO" | "APPROVED" | "MANUAL" | "PAYMENT" | null;
+  overdue?: boolean; days_left?: number | null; due_soon?: boolean;
 }
 export type NoticeStatus =
-  | { scope: "FOUNDATION"; unreceived: { count: number; items: NoticeStatusItem[] } }
+  | { scope: "FOUNDATION"; unreceived: { count: number; items: NoticeStatusItem[] };
+      due_soon_unpaid?: { count: number; items: NoticeStatusItem[]; days: number } }
   | { scope: "SPC"; received: { count: number; unconfirmed: number; items: NoticeStatusItem[] } }
   | { scope: "NONE" };
 
@@ -305,7 +310,7 @@ export interface NoticeTarget {
   principal: number; interest: number; total: number; notice_id: Id | null; issued: boolean; issued_at: string | null; received: boolean;
 }
 export interface NoticeTargets { as_of: string; default_window: boolean; days: number; count: number; items: NoticeTarget[] }
-export interface NoticesIssued { count: number; unreceived: number; items: NoticeStatusItem[] }
+export interface NoticesIssued { count: number; unreceived: number; unpaid?: number; items: NoticeStatusItem[] }
 
 // 입금 확인·승인(Phase 23)
 export interface DepositNotice {
@@ -313,13 +318,20 @@ export interface DepositNotice {
   total: number; principal: number; interest: number; is_deleted: boolean; received_at: string | null;
 }
 export interface Deposit {
-  id: string; deposit_date: string; depositor: string; amount: number; bank_memo: string | null; source: "UPLOAD" | "MANUAL";
+  id: string; deposit_date: string; deposit_time?: string | null; depositor: string; amount: number; bank_memo: string | null; source: "UPLOAD" | "MANUAL";
   file_name: string | null; status: "PENDING" | "COMPLETED" | "EXCLUDED"; hold_reasons: { code: string; label: string }[];
   auto_approved: boolean; manual_done: boolean; decided_by_name: string | null; decided_at: string | null; decision_note: string | null;
   payment_count: number; created_at: string; notice: DepositNotice | null;
+  customer_name?: string | null; customer_key?: string | null; virtual_account?: string | null;
+  dormitory?: { id: string; name: string } | null;
+  group?: { id: string; count: number; total: number; amounts: number[] } | null;
+}
+export interface DormIdent {
+  id: string; dormitory_name: string; school_name: string | null; spc_name: string | null;
+  virtual_account: string | null; virtual_account_masked: string | null; customer_key: string | null; payer_names: string[];
 }
 export interface DepositList { items: Deposit[]; counts: Record<"PENDING" | "COMPLETED" | "EXCLUDED", number>; auto_approve_limit: number }
 export interface DepositUploadResult {
-  added: number; duplicates: number; auto_completed: number; pending: number; read?: number;
+  added: number; duplicates: number; auto_completed: number; pending: number; read?: number; grouped?: number;
   errors: { row: number | null; message: string }[];
 }

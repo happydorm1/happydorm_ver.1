@@ -85,6 +85,10 @@ class Dormitory(Base, AuditMixin):
     # Phase 21: 기숙사별 입금계좌(공문에 인쇄). 비우면 공문 양식의 공통 계좌를 쓴다. 계좌번호는 암호화 저장
     bank_account: Mapped[str | None] = mapped_column(String(400), nullable=True)
     account_holder: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # 은행 입금 식별정보(Phase 23 — 가상계좌 CMS): 입금내역의 가상계좌번호·고객KEY·입금인명으로 기숙사를 알아본다
+    bank_virtual_account: Mapped[str | None] = mapped_column(String(400), nullable=True)   # 암호화 저장
+    bank_customer_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    bank_payer_names: Mapped[list | None] = mapped_column(JSONB, nullable=True)            # 은행에 찍히는 입금인명·고객명(여러 개)
 
     spc: Mapped["SPC"] = relationship(back_populates="dormitories")
 
