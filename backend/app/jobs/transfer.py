@@ -171,14 +171,26 @@ def import_bytes(blob: bytes, password: str) -> dict:
             if not rows:
                 continue
             cols = {col.name: col for col in t.columns}
-            out = []
+            # 같은 표의 다른 줄을 가리키는 칸(이전 상환일정 버전, 대환 전·후 차입금)은 먼저 비워 넣고 나중에 채운다
+            selfref = [fk.parent.name for fk in t.foreign_keys if fk.column.table is t]
+            out, later = [], []
             for r in rows:
                 extra = set(r) - set(cols)
                 if extra:
                     dropped_cols.setdefault(t.name, set()).update(extra)
-                out.append({k: _to_db(cols[k], v) for k, v in r.items() if k in cols})
+                row = {k: _to_db(cols[k], v) for k, v in r.items() if k in cols}
+                links = {k: row[k] for k in selfref if row.get(k) is not None}
+                if links:
+                    later.append((row, links))
+                    row.update({k: None for k in links})
+                out.append(row)
             for i in range(0, len(out), 1000):
                 c.execute(t.insert(), out[i:i + 1000])
+            if later:
+                pk = list(t.primary_key.columns)[0]
+                for row, links in later:
+                    keep = {col.name: row.get(col.name) for col in t.columns if col.onupdate is not None}   # 수정 시각 등은 원래 값 그대로
+                    c.execute(t.update().where(pk == row[pk.name]).values(**links, **keep))
         # 자동 번호(정수 키)는 가져온 최대값 다음부터
         for t in Base.metadata.sorted_tables:
             for col in t.primary_key.columns:
@@ -263,6 +275,9 @@ def main() -> None:
                 print("  [참고] 이 버전에 없는 칸은 건너뜀: " + "; ".join(f"{k}({', '.join(v)})" for k, v in r["dropped_columns"].items()))
     except (TransferError, CryptoError) as e:
         sys.exit(f"[오류] {e}")
+    except Exception as e:  # noqa: BLE001  (DB 오류 — 전체가 되돌려져 아무것도 바뀌지 않음)
+        first = str(getattr(e, "orig", e)).splitlines()[0][:300]
+        sys.exit(f"[오류] 가져오기 중 문제가 생겨 모두 되돌렸습니다(현재 데이터는 그대로입니다).\n  {type(e).__name__}: {first}")
 
 
 if __name__ == "__main__":
