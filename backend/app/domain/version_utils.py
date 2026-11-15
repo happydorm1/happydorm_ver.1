@@ -113,7 +113,14 @@ def _prefetch_related(db: Session, cache: dict, loan_ids: list) -> None:
     row_to_version = {r.id: v.id for v in versions for r in v.rows}
     rec = defaultdict(dict)
     if row_to_version:
-        for rr in db.execute(select(DeferralRecoveryRow).where(DeferralRecoveryRow.schedule_row_id.in_(list(row_to_version)))).scalars():
+        # 행 id 수만큼 조건을 만들면 차입금이 많을 때 DB 한도(65,535개)를 넘으므로, 버전 id로 묶어서 읽는다
+        from app.models.schedule import RepaymentScheduleRow
+        vids = list({v.id for v in versions})
+        q = (select(DeferralRecoveryRow).join(RepaymentScheduleRow, RepaymentScheduleRow.id == DeferralRecoveryRow.schedule_row_id)
+             .where(RepaymentScheduleRow.version_id.in_(vids)))
+        for rr in db.execute(q).scalars():
+            if rr.schedule_row_id not in row_to_version:
+                continue
             d = rec[row_to_version[rr.schedule_row_id]]
             d[rr.schedule_row_id] = d.get(rr.schedule_row_id, 0) + rr.recovery_principal
     for v in versions:

@@ -1,0 +1,15 @@
+# 배포 이미지에 넣지 않는 것 — 비밀키·개발용 파일·데이터
+**/.env
+**/venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.pytest_cache
+*.dlt
+backend/backups
+backend/attachments
+frontend
+docs
+.devcontainer
+.git

@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,6 +39,15 @@ class Settings(BaseSettings):
     # 기관 방침이 바뀌어 고정 휴무일이 생길 때만 .env에 넣는다. 규칙에서 빠진 날은 다음 동기화 때 사용중지된다.
     BANK_EXTRA_CLOSURES: str = ""
     HOLIDAY_RESYNC_DAYS: int = 7  # 임시공휴일이 늦게 지정될 수 있어 주기적으로 다시 받는다
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _psycopg_driver(cls, v: str) -> str:
+        """클라우드(Render 등)가 주는 postgres:// · postgresql:// 주소를 이 프로그램의 드라이버(psycopg) 주소로 바꾼다."""
+        for head in ("postgres://", "postgresql://"):
+            if v.startswith(head):
+                return "postgresql+psycopg://" + v[len(head):]
+        return v
 
 
 settings = Settings()
