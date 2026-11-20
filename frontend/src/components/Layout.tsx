@@ -70,8 +70,8 @@ function SideNav({ role, section, onNavigate }: { role?: Role; section: string; 
     const size = level === 1 ? "text-[15px] font-extrabold pl-4" : level === 2 ? "text-[14px] font-bold pl-7" : "text-[13px] font-normal pl-10";
     return (
       <a key={n.label} href={`#/${n.route}`} onClick={onNavigate} aria-current={active ? "page" : undefined}
-        className={`relative flex items-center pr-4 py-2.5 ${size} ${active ? "bg-nav-active text-nav-accent" : level === 3 ? "text-ink-2 hover:text-ink" : "text-ink"} hover:bg-surface-2`}>
-        {active && <span aria-hidden className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-nav-accent" />}
+        className={`relative mx-2 my-0.5 flex items-center rounded-lg pr-3 py-2.5 ${size} ${active ? "bg-nav-active text-nav-accent shadow-[0_1px_2px_rgba(18,50,90,.12)]" : level === 3 ? "text-ink-2 hover:text-ink" : "text-ink"} hover:bg-surface-2`}>
+        {active && <span aria-hidden className="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-nav-accent" />}
         {level === 3 && <span aria-hidden className="mr-2 text-ink-3">·</span>}{n.label}
       </a>
     );
@@ -83,7 +83,7 @@ function SideNav({ role, section, onNavigate }: { role?: Role; section: string; 
     return (
       <div key={key}>
         <button type="button" aria-expanded={isOpen} aria-controls={id} onClick={() => toggle(key)}
-          className={`w-full flex items-center justify-between pr-4 py-2.5 text-left hover:bg-surface-2 ${level === 1 ? "pl-4 text-[15px] font-extrabold" : "pl-7 text-[14px] font-bold"} ${has ? "text-nav-accent" : "text-ink"}`}>
+          className={`mx-2 my-0.5 w-[calc(100%-1rem)] rounded-lg flex items-center justify-between pr-3 py-2.5 text-left hover:bg-surface-2 ${level === 1 ? "pl-4 text-[15px] font-extrabold" : "pl-7 text-[14px] font-bold"} ${has ? "text-nav-accent" : "text-ink"}`}>
           {n.label}<Chevron open={isOpen} />
         </button>
         <div id={id} hidden={!isOpen} className={level === 1 ? "pb-1" : ""}>

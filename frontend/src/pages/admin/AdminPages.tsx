@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../../api/client";
+import { api, downloadBackup, restoreBackup } from "../../api/client";
 import type { AccessLogItem, AdminAuditItem, Backups, Code, Fund, Holiday, Me, Role, SecurityStatus, UserItem } from "../../api/types";
 import { Badge, Button, Card, Field, Loading, Modal, Notice, PageHeader, Tabs, fmtDateTime, inputCls, useAsync, inputSm } from "../../components/ui";
 import { AUDIT_ACTION } from "../../lib/format";
@@ -322,8 +322,10 @@ function OpsTab() {
           <ul className="divide-y divide-line text-xs">{b.data.items.slice(0, 12).map((x, i) => <li key={i} className="py-1.5 flex gap-2 items-start">
             <Badge tone={x.status === "SUCCESS" ? "good" : "critical"}>{x.kind}</Badge><span className="tabular whitespace-nowrap">{fmtDateTime(x.started_at)}</span>
             <span className="text-ink-2 break-all">{x.file_name ?? ""} {x.size_bytes ? `${(x.size_bytes / 1048576).toFixed(1)}MB` : ""} {x.message ?? ""}</span></li>)}</ul>
-          <p className="mt-2 text-xs text-ink-3">백업은 서버에서 매일 자동 실행합니다(python -m app.jobs.backup run). 분기마다 복구 모의훈련을 하세요.</p>
+          <p className="mt-2 text-xs text-ink-3">서버에 일일 백업 작업(python -m app.jobs.backup run)을 설정했다면 매일 자동으로 남습니다.
+            설정하지 않은 환경(Render·Codespaces)에서는 아래 [백업 파일 내려받기]로 직접 백업하세요.</p>
         </>}
+        <WebBackup onDone={b.reload} />
       </Card>
       <Card title="보안 설정 점검">
         {s.error && <Notice tone="error">{s.error}</Notice>}
@@ -340,5 +342,77 @@ function OpsTab() {
         </div>}
       </Card>
     </div>
+  );
+}
+
+/** 웹에서 백업·되돌리기 — 예약 작업이 없는 서버에서도 관리자가 화면에서 직접 백업하고, 필요하면 그 파일로 되돌린다. */
+function WebBackup({ onDone }: { onDone: () => void }) {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [restore, setRestore] = useState(false);
+  const pwProblem = pw.length > 0 && pw.length < 8 ? "8자 이상으로 정하세요." : pw2.length > 0 && pw !== pw2 ? "두 비밀번호가 다릅니다." : null;
+  return (
+    <div className="mt-4 rounded-lg border border-line bg-surface-2 p-3">
+      <h3 className="text-sm font-extrabold text-card-head-ink">백업 파일 내려받기</h3>
+      <p className="mt-1 text-xs text-ink-2">데이터와 증빙파일 전체를 <b>백업 비밀번호</b>로 암호화한 파일(.dlt) 하나로 내려받습니다.
+        PC·공유폴더 등 <b>서버 밖</b>에 보관하세요. 비밀번호를 잊으면 파일을 열 수 없으니 따로 적어 두세요.</p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <Field label="백업 비밀번호(8자 이상)"><input type="password" className={inputCls} aria-label="백업 비밀번호" autoComplete="new-password"
+          value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+        <Field label="한 번 더"><input type="password" className={inputCls} aria-label="백업 비밀번호 확인" autoComplete="new-password"
+          value={pw2} onChange={(e) => setPw2(e.target.value)} /></Field>
+      </div>
+      {pwProblem && <p className="mt-1 text-xs text-critical-ink">{pwProblem}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button variant="primary" disabled={busy || pw.length < 8 || pw !== pw2} onClick={async () => {
+          setBusy(true); setErr(null); setMsg(null);
+          try { const name = await downloadBackup(pw); setMsg(`백업 파일을 내려받았습니다: ${name}`); setPw(""); setPw2(""); onDone(); }
+          catch (e) { setErr(e instanceof Error ? e.message : "백업하지 못했습니다."); } finally { setBusy(false); }
+        }}>{busy ? "백업 파일 만드는 중…" : "백업 파일 내려받기"}</Button>
+        <Button onClick={() => setRestore(true)}>백업 파일로 되돌리기…</Button>
+      </div>
+      {msg && <div className="mt-2"><Notice tone="success">{msg}</Notice></div>}
+      {err && <div className="mt-2"><Notice tone="error">{err}</Notice></div>}
+      {restore && <RestoreDialog onClose={() => setRestore(false)} />}
+    </div>
+  );
+}
+
+function RestoreDialog({ onClose }: { onClose: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [pw, setPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  return (
+    <Modal title="백업 파일로 되돌리기" onClose={onClose} footer={done
+      ? <Button variant="primary" onClick={() => { window.location.reload(); }}>다시 로그인하기</Button>
+      : <><Button onClick={onClose}>취소</Button>
+        <Button variant="danger" disabled={busy || !file || !pw || confirm.trim() !== "되돌리기"} onClick={async () => {
+          setBusy(true); setErr(null);
+          try {
+            const r = await restoreBackup(file!, pw, confirm);
+            setDone(`되돌렸습니다 — 백업 시각 ${(r.exported_at ?? "").slice(0, 16).replace("T", " ")}(UTC) · 차입금 ${r.counts.loan ?? 0}건 · 증빙파일 ${r.files}개.`);
+          } catch (e) { setErr(e instanceof Error ? e.message : "되돌리지 못했습니다."); } finally { setBusy(false); }
+        }}>{busy ? "되돌리는 중…" : "되돌리기 실행"}</Button></>}>
+      {done ? <Notice tone="success">{done} 사용자 계정도 백업 당시로 돌아갔으니, 백업 당시의 계정으로 다시 로그인하세요.</Notice> : <>
+        <div role="note" className="rounded-lg border border-warning bg-surface px-3 py-2 text-sm">지금 시스템의 데이터가 <b>모두 지워지고</b> 백업 파일 내용으로 바뀝니다.
+          되돌린 뒤에는 이 작업을 취소할 수 없으니, 먼저 [백업 파일 내려받기]로 현재 데이터를 백업해 두세요.</div>
+        <div className="mt-3 grid gap-3">
+          <Field label="백업 파일(.dlt)"><input type="file" accept=".dlt" aria-label="백업 파일"
+            className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-line file:bg-surface-2 file:px-3 file:py-1.5"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
+          <Field label="백업 비밀번호"><input type="password" className={inputCls} aria-label="되돌리기 백업 비밀번호" autoComplete="off"
+            value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+          <Field label="확인 문구 — 되돌리기 를 입력하세요"><input className={inputCls} aria-label="확인 문구" value={confirm}
+            onChange={(e) => setConfirm(e.target.value)} placeholder="되돌리기" /></Field>
+        </div>
+        {err && <div className="mt-3"><Notice tone="error">{err}</Notice></div>}
+      </>}
+    </Modal>
   );
 }

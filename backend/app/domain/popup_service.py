@@ -65,7 +65,8 @@ def _backup_items(db: Session, now: datetime | None = None) -> list[dict]:
         items.append({"key": f"SYSTEM:BACKUP_STALE:{last_ok.id if last_ok else 'none'}", "group": "SYSTEM", "kind": "BACKUP_STALE",
                       "label": "백업 확인 필요",
                       "detail": f"DB 백업이 {settings.BACKUP_ALERT_HOURS}시간 넘게 없습니다({when}). "
-                                "서버의 일일 백업 작업(python -m app.jobs.backup run)이 실행되는지 확인하세요."})
+                                "관리자 › 감사로그 › '백업·보안 점검' 탭의 [백업 파일 내려받기]로 백업하세요"
+                                "(서버에 일일 백업 작업을 설정한 경우에는 그 작업이 실행되는지도 확인하세요)."})
     return items
 
 

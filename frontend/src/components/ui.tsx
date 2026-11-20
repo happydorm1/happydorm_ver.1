@@ -82,8 +82,8 @@ export function Card({ title, actions, children, className = "", id }: {
     <section id={id} aria-label={typeof title === "string" ? title : undefined}
       className={`bg-surface border border-line rounded-xl min-w-0 ${className}`}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
-          {title && <h2 className="font-semibold text-sm mr-auto">{title}</h2>}
+        <header className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line bg-card-head border-l-4 border-l-card-head-bar rounded-tl-xl rounded-tr-xl">
+          {title && <h2 className="font-extrabold text-[15px] text-card-head-ink mr-auto">{title}</h2>}
           {actions}
         </header>
       )}

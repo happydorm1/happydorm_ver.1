@@ -222,6 +222,43 @@ export async function downloadFile(path: string, params: Record<string, string |
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** 웹에서 백업 — 비밀번호를 본문(POST)으로 보내고(주소에 남지 않게) 암호화된 백업 파일을 받아 저장한다. */
+export async function downloadBackup(password: string): Promise<string> {
+  const res = await fetch("/api/v1/admin/backups/download", {
+    method: "POST", headers: { "Content-Type": "application/json", ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}) },
+    body: JSON.stringify({ password }),
+  });
+  if (res.status === 401) { auth.clear(); window.dispatchEvent(new Event("auth:expired")); throw new ApiError(401, "로그인이 만료되었습니다."); }
+  if (!res.ok) {
+    let detail = `백업 실패 (${res.status})`;
+    try { const b = await res.json(); if (typeof b.detail === "string") detail = b.detail; else if (Array.isArray(b.detail)) detail = "백업 비밀번호는 8자 이상으로 정하세요."; } catch { /* noop */ }
+    throw new ApiError(res.status, detail);
+  }
+  const cd = res.headers.get("content-disposition") ?? "";
+  const m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const name = m ? decodeURIComponent(m[1]) : "행복기숙사_백업.dlt";
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  dataVersion.n += 1;
+  return name;
+}
+
+/** 백업 파일로 되돌리기(multipart) — 지금 데이터를 모두 지우고 파일 내용으로 바꾼다. */
+export async function restoreBackup(file: File, password: string, confirm: string): Promise<{ ok: boolean; counts: Record<string, number>; files: number; exported_at: string }> {
+  const fd = new FormData();
+  fd.append("file", file); fd.append("password", password); fd.append("confirm", confirm);
+  const res = await fetch("/api/v1/admin/backups/restore", { method: "POST", headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {}, body: fd });
+  if (!res.ok) {
+    let detail = `되돌리기 실패 (${res.status})`;
+    try { const b = await res.json(); if (typeof b.detail === "string") detail = b.detail; } catch { /* noop */ }
+    throw new ApiError(res.status, detail);
+  }
+  dataVersion.n += 1;
+  return res.json();
+}
+
 /** 증빙자료 올리기(multipart) — 서버가 형식·용량·실행파일 여부를 다시 검사한다. */
 export async function uploadAttachment(loanId: string, file: File, form: { owner_type: string; owner_id?: string; description?: string }): Promise<Attachment> {
   const fd = new FormData();

@@ -15,8 +15,8 @@
  */
 :root {
   color-scheme: light;
-  --page: #f3f4f2;
-  --surface-1: #fcfcfb;
+  --page: #eef1f5;           /* 정보가 없는 바탕 — 흰 카드와 구분되도록 옅은 회청색 */
+  --surface-1: #ffffff;
   --surface-2: #f0efec;
   --border: #dedcd6;
   --text-primary: #0b0b0b;
@@ -36,6 +36,9 @@
   --status-warning-ink: #8a5a00;
   --nav-accent: #12325a;     /* 메뉴: 상위 항목 표시선·선택 글자 */
   --nav-active: #e7edf6;     /* 메뉴: 선택 항목 배경 */
+  --card-head: #eef3fa;      /* 카드 제목 줄 배경 */
+  --card-head-bar: #12325a;  /* 카드 제목 줄 왼쪽 세로 막대 */
+  --card-head-ink: #12325a;  /* 카드 제목 글자 */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,6 +61,9 @@
     --status-warning-ink: #fab219;
     --nav-accent: #8db8f0;
     --nav-active: #1e2a3b;
+    --card-head: #1b2533;
+    --card-head-bar: #8db8f0;
+    --card-head-ink: #cfe0f7;
   }
 }
 
@@ -80,6 +86,9 @@
   --status-warning-ink: #fab219;
     --nav-accent: #8db8f0;
     --nav-active: #1e2a3b;
+    --card-head: #1b2533;
+    --card-head-bar: #8db8f0;
+    --card-head-ink: #cfe0f7;
 }
 
 @theme inline {
@@ -104,6 +113,9 @@
   --color-warning-ink: var(--status-warning-ink);
   --color-nav-accent: var(--nav-accent);
   --color-nav-active: var(--nav-active);
+  --color-card-head: var(--card-head);
+  --color-card-head-bar: var(--card-head-bar);
+  --color-card-head-ink: var(--card-head-ink);
   --font-sans: "NanumSquare", "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
 }
 

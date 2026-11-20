@@ -3,7 +3,11 @@ import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+import hashlib
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -97,6 +101,81 @@ def backups(limit: int = Query(50, ge=1, le=500), db: Session = Depends(get_db),
             "items": [{"kind": r.kind, "status": r.status, "started_at": r.started_at, "finished_at": r.finished_at,
                        "file_name": r.file_name, "size_bytes": r.size_bytes, "sha256": r.sha256, "encrypted": r.encrypted,
                        "message": r.message} for r in rows]}
+
+
+class BackupDownloadIn(BaseModel):
+    password: str = Field(..., min_length=8, max_length=200)
+
+
+@router.post("/backups/download")
+def backup_download(payload: BackupDownloadIn, db: Session = Depends(get_db), current_user: User = Depends(ADMIN)):
+    """웹에서 백업 — 데이터·증빙파일 전체를 '백업 비밀번호'로 암호화한 파일(.dlt) 하나로 내려준다.
+    서버에 pg_dump·예약 작업이 없는 환경(Render 무료, Codespaces)에서도 쓸 수 있다. 내려받은 파일은 PC 등 서버 밖에 보관한다."""
+    from app.domain.audit import record_audit
+    from app.jobs import transfer
+    started = datetime.now(timezone.utc)
+    try:
+        data, meta = transfer.export_bytes()
+        blob = transfer.seal(data, payload.password)
+    except Exception as e:  # noqa: BLE001
+        db.add(BackupLog(kind="BACKUP", status="FAILED", started_at=started, finished_at=datetime.now(timezone.utc),
+                         message=f"웹 백업 실패: {str(e)[:300]}"))
+        db.commit()
+        from app.core.crypto import CryptoError
+        if isinstance(e, CryptoError):
+            raise HTTPException(status_code=500, detail="암호화된 값을 풀지 못해 백업하지 못했습니다 — 서버의 암호화 키(DATA_ENCRYPTION_KEY)가 바뀐 것 같습니다. 관리자에게 알려 주세요.")
+        raise HTTPException(status_code=500, detail="백업 파일을 만들지 못했습니다. 잠시 뒤 다시 시도하세요.")
+    name = f"행복기숙사_백업_{datetime.now(KST):%Y%m%d_%H%M}.dlt"
+    db.add(BackupLog(kind="BACKUP", status="SUCCESS", started_at=started, finished_at=datetime.now(timezone.utc),
+                     file_name=name, size_bytes=len(blob), sha256=hashlib.sha256(blob).hexdigest(), encrypted=True,
+                     message=f"웹에서 내려받음 — {current_user.name} · 차입금 {meta['counts'].get('loan', 0)}건"))
+    record_audit(db, table_name="backup_log", record_id=current_user.id, loan_id=None, action="DOWNLOAD", user_id=current_user.id,
+                 field="backup", after=name)
+    db.commit()
+    return Response(content=blob, media_type="application/octet-stream",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"})
+
+
+MAX_RESTORE_BYTES = 200 * 1024 * 1024
+
+
+@router.post("/backups/restore")
+async def backup_restore(file: UploadFile = File(...), password: str = Form(..., min_length=1, max_length=200),
+                         confirm: str = Form(...), db: Session = Depends(get_db), current_user: User = Depends(ADMIN)):
+    """백업 파일(.dlt)로 되돌리기 — 지금 DB의 데이터를 모두 지우고 파일 내용으로 바꾼다. 확인 문구 '되돌리기'를 입력해야 실행된다."""
+    from app.jobs import transfer
+    if confirm.strip() != "되돌리기":
+        raise HTTPException(status_code=422, detail="확인 문구로 '되돌리기'를 정확히 입력하세요.")
+    blob = await file.read()
+    if len(blob) > MAX_RESTORE_BYTES:
+        raise HTTPException(status_code=413, detail="파일이 너무 큽니다(200MB 이하).")
+    try:
+        meta = transfer.read_meta(blob, password)
+    except transfer.TransferError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    who = f"{current_user.name}({current_user.email})"
+    # 백업 이력은 되돌리지 않고 지금 것을 그대로 이어 간다(되돌린 뒤 '백업 없음' 안내가 다시 뜨지 않게)
+    keep_logs = [{c.name: getattr(r, c.name) for c in BackupLog.__table__.columns}
+                 for r in db.execute(select(BackupLog)).scalars()]
+    db.rollback()          # 이 요청이 잡고 있는 읽기 잠금을 풀어야 전체 비우기(TRUNCATE)가 기다리지 않는다
+    db.close()
+    started = datetime.now(timezone.utc)
+    try:
+        r = transfer.import_bytes(blob, password)
+    except Exception as e:  # noqa: BLE001  (한 덩어리 작업이라 실패하면 아무것도 바뀌지 않음)
+        raise HTTPException(status_code=500, detail=f"되돌리기에 실패해 모두 취소했습니다(현재 데이터는 그대로입니다): {str(getattr(e, 'orig', e)).splitlines()[0][:200]}")
+    from app.core.database import SessionLocal
+    with SessionLocal() as s2:
+        have = set(s2.execute(select(BackupLog.id)).scalars())
+        for row in keep_logs:
+            if row["id"] not in have:
+                s2.add(BackupLog(**row))
+        s2.add(BackupLog(kind="RESTORE", status="SUCCESS", started_at=started, finished_at=datetime.now(timezone.utc),
+                         file_name=(file.filename or "")[:200], size_bytes=len(blob), encrypted=True,
+                         message=f"웹에서 되돌림 — {who} · 백업 시각 {meta.get('exported_at', '')[:19]}"))
+        s2.commit()
+    return {"ok": True, "counts": r["counts"], "files": r["files"], "exported_at": meta.get("exported_at"),
+            "skipped_tables": r["skipped_tables"], "dropped_columns": r["dropped_columns"]}
 
 
 @router.get("/security-status")
