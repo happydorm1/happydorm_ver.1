@@ -7,6 +7,7 @@ import { Badge, Button, Card, Field, Loading, Modal, MoneyInput, Notice, PageHea
 import { compactWon, won } from "../lib/format";
 import { canWrite } from "../lib/perm";
 import { go, href } from "../lib/router";
+import { ResyncDialog } from "./admin/MigrationPage";
 
 export const PAY_STATUS: Record<string, { label: string; tone: "good" | "warning" | "critical" | "neutral" | "brand" }> = {
   PAID: { label: "완납", tone: "good" }, OVERPAID: { label: "초과납부", tone: "warning" }, PARTIAL: { label: "일부납부", tone: "critical" },
@@ -21,14 +22,17 @@ export function PaymentsPage({ me, asOf, tab, loanId }: { me: Me | null; asOf: s
       <PageHeader title="상환 실적 관리" sub={`예정 상환액과 실제 납부액을 비교합니다. 기준일 ${asOf} · 상환일이 휴일이면 다음 영업일이 납부기한입니다.`} />
       <Tabs label="실제 상환관리" value={tab} onChange={(t) => go("payments", { tab: t, loan: loanId })}
         tabs={[{ value: "overdue", label: "미납 현황" }, { value: "loan", label: "차입금별 납부" }]} />
-      {tab === "overdue" ? <OverdueTab asOf={asOf} /> : <LoanPayments me={me} asOf={asOf} loanId={loanId} />}
+      {tab === "overdue" ? <OverdueTab asOf={asOf} isAdmin={me?.role === "SYSTEM_ADMIN"} /> : <LoanPayments me={me} asOf={asOf} loanId={loanId} />}
     </div>
   );
 }
 
-function OverdueTab({ asOf }: { asOf: string }) {
-  const { data, error, loading } = useAsync<OverdueList>(() => api.overdue(asOf), [asOf]);
+function OverdueTab({ asOf, isAdmin }: { asOf: string; isAdmin: boolean }) {
+  const [k, setK] = useState(0);
+  const { data, error, loading } = useAsync<OverdueList>(() => api.overdue(asOf), [asOf, k]);
   const [open, setOpen] = useState<string | null>(null);
+  const [resync, setResync] = useState<NonNullable<OverdueList["migration_stale"]>[number] | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   if (error) return <Notice tone="error">{error}</Notice>;
   if (loading && !data) return <Loading />;
   if (!data) return null;
@@ -39,7 +43,19 @@ function OverdueTab({ asOf }: { asOf: string }) {
     g.items.push(x); g.outstanding += x.outstanding; groups.set(x.loan_id, g);
   }
   const list = [...groups.values()].sort((a, b) => b.outstanding - a.outstanding);
-  return (
+  const stale = data.migration_stale ?? [];
+  return (<>
+    {done && <Notice tone="success" onClose={() => setDone(null)}>{done}</Notice>}
+    {stale.map((b) => (
+      <div key={b.batch_id} role="note" className="rounded-xl border border-warning bg-surface px-4 py-3 text-sm flex flex-wrap items-center gap-2">
+        <span className="font-semibold">이관 납부기록 확인 필요</span>
+        <span className="text-ink-2">기존 차입금 이관(기준일 {b.cutoff_date}) 때 '납부완료'로 기록한 회차 중 <b>{b.count}개</b>가 그 뒤 등록한 이벤트(상환유예·금리변동 등)로
+          금액이 바뀌었습니다({b.loans.join(", ")}). 아래 미납·일부납부에 섞여 보일 수 있습니다.</span>
+        {isAdmin ? <Button size="sm" variant="primary" className="ml-auto" onClick={() => setResync(b)}>납부기록 다시 맞추기</Button>
+          : <span className="ml-auto text-xs text-ink-3">시스템관리자에게 '납부기록 다시 맞추기'를 요청하세요.</span>}
+      </div>))}
+    {resync && <ResyncDialog batchId={resync.batch_id} title={`${resync.file_name} (기준일 ${resync.cutoff_date})`} onClose={() => setResync(null)}
+      onDone={(t) => { setResync(null); setDone(t); setK((x) => x + 1); }} />}
     <Card title={`납부기한이 지난 미납·일부납부 — 차입금 ${list.length}건 · 회차 ${data.overdue_count}개`}
       actions={<span className="text-sm tabular">미납액 합계 <b>{won(data.overdue_amount)}</b></span>}>
       {list.length === 0 ? <p className="text-sm text-ink-3">기준일 현재 미납이 없습니다.</p> : (
@@ -69,7 +85,7 @@ function OverdueTab({ asOf }: { asOf: string }) {
         </div>
       )}
     </Card>
-  );
+  </>);
 }
 
 function LoanPayments({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: string }) {

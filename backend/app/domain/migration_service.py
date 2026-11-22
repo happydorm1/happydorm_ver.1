@@ -656,3 +656,92 @@ def cancel_batch(db: Session, batch: MigrationBatch, reason: str, user: User) ->
     batch.cancel_reason = reason[:300]
     db.commit()
     return {"loans": n_loans, "dormitories": n_dorms}
+
+
+AUTO_PAID_PREFIX = "기존 차입금 이관(기준일"
+
+
+def resync_paid(db: Session, batch: MigrationBatch, user: User | None, *, apply: bool) -> dict:
+    """
+    이관 납부기록 다시 맞추기.
+    '기준일 이전 회차 납부완료'로 만든 납부기록은 이관 당시(V1) 원리금 테이블 금액이다. 그 뒤 기준일 이전에 있었던
+    상환유예·금리변동 등을 이벤트로 등록하면 지난 회차 금액이 바뀌거나 회수 회차가 새로 생겨 일부납부·미납·초과납부로 보인다.
+    → 기준일 이전 회차를 지금 원리금 테이블대로 다시 '예정대로 납부'로 맞춘다.
+    - 이관이 자동으로 만든 납부기록만 고친다(취소 후 새로 기록, 이력 보존). 담당자가 직접 입력한 납부·입금 승인·납부예외 시트 회차는 건드리지 않는다.
+    - 이관 당시에도 있던 회차인데 납부기록이 없던 회차(= 납부예외 시트의 미납)는 그대로 미납으로 둔다.
+    """
+    from app.domain.audit import record_audit
+    from app.models.payment import PaymentStatus
+    from app.models.schedule import RepaymentScheduleVersion
+    if not batch.mark_paid:
+        raise ValueError("이 이관은 '기준일 이전 납부완료 처리'를 하지 않아 맞출 납부기록이 없습니다.")
+    if batch.cancelled_at:
+        raise ValueError("취소한 이관입니다.")
+    cutoff = batch.cutoff_date
+    out = {"loans": [], "fixed": 0, "added": 0, "cancelled": 0}
+    for lid in batch.loan_ids or []:
+        loan = db.get(Loan, uuid.UUID(lid))
+        if loan is None or loan.is_deleted:
+            continue
+        now = scheduled_by_due_date(db, get_current_version(db, loan.id))
+        v1 = db.execute(select(RepaymentScheduleVersion).where(RepaymentScheduleVersion.loan_id == loan.id)
+                        .order_by(RepaymentScheduleVersion.version_no).limit(1)).scalar_one()
+        at_migration = scheduled_by_due_date(db, v1)
+        pays = defaultdict(list)
+        for p in db.execute(select(ActualPayment).where(ActualPayment.loan_id == loan.id, ActualPayment.due_date <= cutoff,
+                                                        ActualPayment.status == PaymentStatus.ACTIVE)).scalars():
+            pays[p.due_date].append(p)
+        changes = []
+        for d in sorted(set(now) | set(pays)):
+            if d > cutoff:
+                continue
+            sch = now.get(d, {"principal": 0, "interest": 0, "total": 0})
+            mine = pays.get(d, [])
+            auto = [p for p in mine if (p.remark or "").startswith(AUTO_PAID_PREFIX)]
+            if len(auto) != len(mine):
+                continue                    # 사람이 넣은 납부가 있는 회차는 그대로
+            if not mine and (d in at_migration and at_migration[d]["total"] > 0):
+                continue                    # 이관 때도 있던 회차인데 납부가 없었음 = 납부예외(미납) — 그대로
+            paid_p = sum(p.actual_principal for p in auto)
+            paid_i = sum(p.actual_interest for p in auto)
+            if (paid_p, paid_i) == (sch["principal"], sch["interest"]):
+                continue
+            changes.append({"due_date": d.isoformat(), "before": paid_p + paid_i, "after": sch["total"],
+                            "kind": "추가" if not auto else ("취소" if sch["total"] <= 0 else "금액 맞춤")})
+            if not apply:
+                continue
+            reason = "이관 납부기록 다시 맞추기 — 기준일 이전 이벤트(상환유예·금리변동 등) 반영"
+            for p in auto:
+                record_audit(db, table_name="actual_payment", record_id=p.id, loan_id=loan.id, action="CANCEL", user_id=user.id,
+                             field="status", before=PaymentStatus.ACTIVE.value, after=PaymentStatus.CANCELLED.value, reason=reason)
+                p.status = PaymentStatus.CANCELLED
+                p.cancel_reason = reason
+                p.cancelled_at = datetime.now(timezone.utc)
+                p.cancelled_by = user.id
+                out["cancelled"] += 1
+            if sch["total"] > 0:
+                db.add(ActualPayment(loan_id=loan.id, due_date=d, actual_paid_date=d, actual_principal=sch["principal"],
+                                     actual_interest=sch["interest"],
+                                     remark=f"{AUTO_PAID_PREFIX} {cutoff} 이전 예정대로 납부 — 이벤트 반영해 다시 맞춤)", created_by=user.id))
+                out["added" if not auto else "fixed"] += 1
+        if changes:
+            out["loans"].append({"loan_id": str(loan.id), "loan_code": loan.loan_code, "changes": changes})
+    if apply:
+        db.commit()
+    out["total"] = sum(len(x["changes"]) for x in out["loans"])
+    return out
+
+
+def stale_batches(db: Session) -> list[dict]:
+    """'기준일 이전 납부완료'로 이관한 뒤 이벤트 등으로 금액이 달라진 회차가 있는 이관 — 미납 현황에 안내한다."""
+    out = []
+    for b in db.execute(select(MigrationBatch).where(MigrationBatch.is_deleted.is_(False), MigrationBatch.mark_paid.is_(True),
+                                                     MigrationBatch.cancelled_at.is_(None))).scalars():
+        try:
+            r = resync_paid(db, b, None, apply=False)
+        except Exception:  # noqa: BLE001  (안내용 — 계산 실패가 미납 현황을 막지 않게)
+            continue
+        if r["total"]:
+            out.append({"batch_id": str(b.id), "file_name": b.file_name, "cutoff_date": b.cutoff_date.isoformat(),
+                        "count": r["total"], "loans": [x["loan_code"] for x in r["loans"]]})
+    return out

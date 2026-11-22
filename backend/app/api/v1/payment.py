@@ -125,4 +125,9 @@ def list_overdue(as_of: date | None = None, db: Session = Depends(get_db), curre
                               "due_date": r["due_date"], "scheduled_total": r["scheduled_total"],
                               "paid_total": r["paid_total"], "outstanding": r["outstanding"], "status": r["status"]})
     items.sort(key=lambda x: (x["due_date"], x["loan_code"]))
-    return {"as_of": as_of, "overdue_count": len(items), "overdue_amount": sum(i["outstanding"] for i in items), "items": items}
+    stale = []
+    if current_user.role in (UserRole.SYSTEM_ADMIN, UserRole.FOUNDATION_FUND_MANAGER):
+        from app.domain.migration_service import stale_batches
+        stale = stale_batches(db)
+    return {"as_of": as_of, "overdue_count": len(items), "overdue_amount": sum(i["outstanding"] for i in items), "items": items,
+            "migration_stale": stale}

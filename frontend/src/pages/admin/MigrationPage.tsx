@@ -1,6 +1,7 @@
+import { won } from "../../lib/format";
 import { useState } from "react";
 import { ApiError, api, downloadFile, runMigration } from "../../api/client";
-import type { Me, MigrationBatch, MigrationIssue, MigrationResult } from "../../api/types";
+import type { Me, MigrationBatch, MigrationIssue, MigrationResult, ResyncResult } from "../../api/types";
 import { Badge, Button, Card, Field, Loading, Modal, Notice, PageHeader, fmtDateTime, inputCls, useAsync } from "../../components/ui";
 import { isAdmin } from "../../lib/perm";
 import { refreshRefData } from "../../lib/refdata";
@@ -140,6 +141,7 @@ function History() {
   const [k, setK] = useState(0);
   const { data, error } = useAsync<MigrationBatch[]>(() => api.migrationBatches(), [k]);
   const [cancel, setCancel] = useState<MigrationBatch | null>(null);
+  const [resync, setResync] = useState<MigrationBatch | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "error" | "success"; text: string } | null>(null);
@@ -165,12 +167,15 @@ function History() {
             {b.cancelled_at && <span className="text-xs text-ink-3 w-full">취소 사유: {b.cancel_reason} · {fmtDateTime(b.cancelled_at)}</span>}
             <span className="ml-auto flex gap-2">
               <Button size="sm" onClick={() => downloadFile(`/admin/migration/batches/${b.id}/report`, {}, "이관대조표.xlsx").catch((e) => setMsg({ tone: "error", text: e.message }))}>대조표 내려받기</Button>
+              {!b.cancelled_at && b.mark_paid && <Button size="sm" onClick={() => setResync(b)}>납부기록 다시 맞추기</Button>}
               {!b.cancelled_at && <Button size="sm" variant="danger" onClick={() => setCancel(b)}>이관 취소</Button>}
             </span>
           </li>))}
         </ul>
       )}
       <p className="mt-2 text-xs text-ink-3">대조표의 '기존 엑셀 잔여원금' 칸에 기존 관리 엑셀의 같은 기준일 잔여원금을 넣으면 '차이'가 자동 계산됩니다. 0이 아니면 조건·금리이력·중도변수를 확인하세요.</p>
+      {resync && <ResyncDialog batchId={resync.id} title={`${resync.file_name} (기준일 ${resync.cutoff_date})`} onClose={() => setResync(null)}
+        onDone={(t) => { setResync(null); setMsg({ tone: "success", text: t }); }} />}
       {cancel && <Modal title="이관 취소" onClose={() => setCancel(null)} footer={<>
         <Button onClick={() => setCancel(null)}>닫기</Button>
         <Button variant="danger" disabled={busy || !reason.trim()} onClick={doCancel}>{busy ? "취소 중…" : "이관 취소"}</Button></>}>
@@ -185,5 +190,45 @@ function History() {
         </Field>
       </Modal>}
     </Card>
+  );
+}
+
+/** 이관 납부기록 다시 맞추기 — 미리보기(바뀔 회차) → 확인 → 반영. 미납 현황 화면에서도 쓴다. */
+export function ResyncDialog({ batchId, title, onClose, onDone }: { batchId: string; title: string; onClose: () => void; onDone: (msg: string) => void }) {
+  const { data, error } = useAsync<ResyncResult>(() => api.resyncMigration(batchId, false), [batchId]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <Modal wide title="이관 납부기록 다시 맞추기" onClose={onClose} footer={<>
+      <Button onClick={onClose}>닫기</Button>
+      <Button variant="primary" disabled={busy || !data || data.total === 0} onClick={async () => {
+        setBusy(true); setErr(null);
+        try {
+          const r = await api.resyncMigration(batchId, true);
+          onDone(`납부기록을 다시 맞췄습니다 — 금액 맞춤 ${r.fixed}회차, 새 회차 추가 ${r.added}회차(이전 기록은 취소 처리로 이력에 남음).`);
+        } catch (e) { setErr(e instanceof Error ? e.message : "맞추지 못했습니다."); } finally { setBusy(false); }
+      }}>{busy ? "맞추는 중…" : "이대로 맞추기"}</Button></>}>
+      <p className="font-semibold break-all">{title}</p>
+      <p className="mt-1 text-sm text-ink-2">이관 때 '기준일 이전 회차 납부완료'로 만든 납부기록은 <b>그때의 원리금 테이블 금액</b>입니다.
+        그 뒤 기준일 이전에 있었던 상환유예·금리변동 등을 이벤트로 등록하면 지난 회차 금액이 바뀌거나 회수 회차가 새로 생겨
+        일부납부·미납·초과납부로 보입니다. 아래 회차를 <b>지금 원리금 테이블 금액대로 '예정대로 납부'</b>로 다시 기록합니다.</p>
+      <ul className="mt-2 list-disc pl-5 text-xs text-ink-3 space-y-0.5">
+        <li>이관이 자동으로 만든 납부기록만 고칩니다. 직접 입력한 납부·입금 승인·납부예외 시트로 넣은 회차는 그대로 둡니다.</li>
+        <li>이전 기록은 지우지 않고 '취소' 처리해 이력에 남깁니다.</li>
+      </ul>
+      {(error || err) && <div className="mt-3"><Notice tone="error">{error ?? err}</Notice></div>}
+      {!data ? <Loading /> : data.total === 0 ? <div className="mt-3"><Notice tone="success">맞출 회차가 없습니다 — 이관 납부기록이 지금 원리금 테이블과 같습니다.</Notice></div> : (
+        <div className="mt-3 max-h-[45vh] overflow-auto border border-line rounded-lg">
+          <table className="w-full text-sm" aria-label="다시 맞출 회차">
+            <thead><tr className="text-xs text-ink-2 bg-surface-2 sticky top-0">{["차입금", "상환예정일", "구분", "지금 납부기록", "맞출 금액"].map((h, i) =>
+              <th key={i} className={`px-3 py-2 font-medium ${i >= 3 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
+            <tbody>{data.loans.flatMap((l) => l.changes.map((c) => (
+              <tr key={l.loan_id + c.due_date} className="border-t border-line">
+                <td className="px-3 py-1.5">{l.loan_code}</td><td className="px-3 py-1.5 tabular">{c.due_date}</td><td className="px-3 py-1.5">{c.kind}</td>
+                <td className="px-3 py-1.5 text-right tabular">{won(c.before)}</td><td className="px-3 py-1.5 text-right tabular font-semibold">{won(c.after)}</td>
+              </tr>)))}</tbody>
+          </table>
+        </div>)}
+    </Modal>
   );
 }

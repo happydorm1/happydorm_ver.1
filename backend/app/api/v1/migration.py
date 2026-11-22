@@ -99,6 +99,17 @@ def report(batch_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depe
     return _xlsx(svc.build_report(db, b), f"이관대조표_{b.cutoff_date}.xlsx")
 
 
+@router.post("/batches/{batch_id}/resync-paid")
+def resync_paid(batch_id: uuid.UUID, apply: bool = False, db: Session = Depends(get_db), user: User = Depends(ADMIN)):
+    """이관 납부기록 다시 맞추기 — apply=false면 바뀔 회차만 보여주고(미리보기), true면 반영한다."""
+    b = _batch(db, batch_id)
+    try:
+        return svc.resync_paid(db, b, user, apply=apply)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @router.post("/batches/{batch_id}/cancel")
 def cancel(batch_id: uuid.UUID, body: ReasonIn, db: Session = Depends(get_db), user: User = Depends(ADMIN)):
     b = _batch(db, batch_id)

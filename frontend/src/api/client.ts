@@ -4,7 +4,7 @@ import type {
   AccessLogItem, AdminAuditItem, Backups, EventListItem, EventRequestItem, Holiday, Notice, NoticeData, NotificationItem,
   OverdueList, Payment, PaymentSummary, SecurityStatus, Template, UserItem,
   Attachment, AttachmentSettings, ScheduleNote, Contact, ContactInput, DeletionRecord, AdminDormitory,
-  MigrationBatch, MigrationResult, DormAccount, NoticeTargets, NoticesIssued, Deposit, DepositList, DepositNotice, DepositUploadResult, DormIdent } from "./types";
+  MigrationBatch, MigrationResult, DormAccount, NoticeTargets, NoticesIssued, Deposit, DepositList, DepositNotice, DepositUploadResult, DormIdent, ResyncResult } from "./types";
 
 const TOKEN_KEY = "access_token";
 
@@ -150,6 +150,8 @@ export const api = {
   noticesIssued: (p: Record<string, string | undefined>) => request<NoticesIssued>("/notices/issued", p),
   notice: (id: string) => request<Notice>(`/notices/${id}`),   // SPC 담당자가 열면 '수신'으로 기록
   migrationBatches: () => request<MigrationBatch[]>("/admin/migration/batches"),
+  resyncMigration: (id: string, apply: boolean) =>
+    request<ResyncResult>(`/admin/migration/batches/${id}/resync-paid`, { apply: String(apply) }, {}, "POST"),
   cancelMigration: (id: string, reason: string) => request<{ loans: number; dormitories: number }>(`/admin/migration/batches/${id}/cancel`, undefined, { reason }),
   restoreDeletion: (id: string) => request<DeletionRecord>(`/admin/deletions/${id}/restore`, undefined, {}),
   deleteDormitory: (id: string, reason: string) => request<DeletionRecord>(`/admin/delete/dormitories/${id}`, undefined, { reason }),

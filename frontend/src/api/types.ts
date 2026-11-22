@@ -203,6 +203,11 @@ export interface OverdueList {
   as_of: string; overdue_count: number; overdue_amount: number;
   items: { loan_id: Id; loan_code: string; dormitory_name: string; due_date: string; scheduled_total: number; paid_total: number;
     outstanding: number; status: string }[];
+  migration_stale?: { batch_id: Id; file_name: string; cutoff_date: string; count: number; loans: string[] }[];
+}
+export interface ResyncResult {
+  total: number; fixed: number; added: number; cancelled: number;
+  loans: { loan_id: Id; loan_code: string; changes: { due_date: string; before: number; after: number; kind: string }[] }[];
 }
 export interface Template { id: Id; template_name: string; template_type: string; config: { bank_account?: string; account_holder?: string }; is_active: boolean }
 export interface NoticeData {
