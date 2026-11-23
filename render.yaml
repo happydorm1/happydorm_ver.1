@@ -20,6 +20,8 @@ services:
         generateValue: true      # 로그인 토큰용 비밀키 — Render가 무작위로 만든다
       - key: DATA_ENCRYPTION_KEY
         generateValue: true      # 계좌번호 등 암호화 키(32바이트) — Render가 무작위로 만든다. 절대 바꾸지 말 것
+      - key: PDF_ENGINE
+        value: builtin           # 공문 PDF를 LibreOffice 없이 내장 방식으로(무료 서버의 작은 메모리·CPU에서도 빠르고 안정적)
       - key: SEED_DEMO
         value: "1"               # DB가 비어 있을 때만 데모 데이터를 만든다
       - key: KASI_SERVICE_KEY

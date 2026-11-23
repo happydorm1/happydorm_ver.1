@@ -18,3 +18,4 @@ python-dateutil==2.9.0.post0
 pytest==9.1.1
 httpx2==2.13.1
 xlrd==2.0.2
+fpdf2==2.9.0

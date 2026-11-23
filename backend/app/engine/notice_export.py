@@ -189,7 +189,7 @@ def find_soffice() -> str | None:
     return next((p for p in _DEFAULT_SOFFICE if Path(p).exists()), None)
 
 
-def convert_xlsx_to_pdf(xlsx_bytes: bytes) -> bytes:
+def convert_xlsx_to_pdf(xlsx_bytes: bytes, timeout: int = 120) -> bytes:
     """LibreOffice(headless)로 PDF 변환. 서버에 LibreOffice가 없으면 PdfUnavailableError."""
     soffice = find_soffice()
     if not soffice:
@@ -202,7 +202,7 @@ def convert_xlsx_to_pdf(xlsx_bytes: bytes) -> bytes:
         try:
             subprocess.run(
                 [soffice, f"-env:UserInstallation={profile}", "--headless", "--convert-to", "pdf", "--outdir", tmp, str(src)],
-                check=True, capture_output=True, timeout=120, env=env,
+                check=True, capture_output=True, timeout=timeout, env=env,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
             raise PdfUnavailableError(f"PDF 변환에 실패했습니다: {e}")
@@ -210,3 +210,28 @@ def convert_xlsx_to_pdf(xlsx_bytes: bytes) -> bytes:
         if not out.exists():
             raise PdfUnavailableError("PDF 변환 결과 파일이 없습니다.")
         return out.read_bytes()
+
+
+def notice_pdf(data: dict, xlsx_bytes: bytes | None = None) -> bytes:
+    """
+    공문 PDF 만들기. PDF_ENGINE 설정:
+      auto(기본)  — LibreOffice가 있으면 Excel 공문을 그대로 PDF로 바꾸고, 없거나 실패하면 내장 방식으로 그린다
+      builtin     — 항상 내장 방식(Render 무료처럼 메모리·CPU가 작은 서버 권장)
+      libreoffice — LibreOffice만 사용(실패하면 오류)
+    """
+    from app.core.config import settings
+    from app.engine.notice_pdf import FontMissing, build_notice_pdf
+    engine = (settings.PDF_ENGINE or "auto").lower()
+    lo_error = None
+    if engine in ("auto", "libreoffice"):
+        try:
+            return convert_xlsx_to_pdf(xlsx_bytes if xlsx_bytes is not None else build_notice_workbook(data),
+                                       timeout=60 if engine == "auto" else 120)
+        except PdfUnavailableError as e:
+            if engine == "libreoffice":
+                raise
+            lo_error = e
+    try:
+        return build_notice_pdf(data, settings.PDF_FONT_PATH)
+    except FontMissing as e:
+        raise PdfUnavailableError(f"{e} " + (str(lo_error) if lo_error else INSTALL_HINT))

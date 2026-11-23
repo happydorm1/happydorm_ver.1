@@ -13,7 +13,7 @@ from app.core.crypto import mask_account, protect_account, reveal_account
 from app.core.database import get_db
 from app.core.security import ensure_can_download, get_current_user, require_roles
 from app.domain.notice_service import NoticeError, build_notice_data, get_active_template, issue_notice
-from app.engine.notice_export import PdfUnavailableError, build_notice_workbook, convert_xlsx_to_pdf
+from app.engine.notice_export import PdfUnavailableError, build_notice_workbook, notice_pdf
 from app.domain.notice_status import mark_received, notice_targets, notices_issued
 from app.models.document import DocumentTemplate, GeneratedDocument
 from app.models.organization import Dormitory, User, UserRole
@@ -212,12 +212,13 @@ def download_notice(notice_id: uuid.UUID, format: str = "xlsx", db: Session = De
     fmt = format.lower()
     if fmt not in ("xlsx", "pdf"):
         raise HTTPException(status_code=422, detail="format은 xlsx 또는 pdf여야 합니다.")
-    content = build_notice_workbook(_notice_out(doc).generated_data)
+    data = _notice_out(doc).generated_data
+    content = build_notice_workbook(data)
     mark_received(db, doc, current_user, "DOWNLOAD")        # 기숙사 측(SPC 담당자)이 내려받으면 수신
     media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     if fmt == "pdf":
         try:
-            content = convert_xlsx_to_pdf(content)
+            content = notice_pdf(data, content)
         except PdfUnavailableError as e:
             raise HTTPException(status_code=501, detail=str(e))
         media = "application/pdf"
