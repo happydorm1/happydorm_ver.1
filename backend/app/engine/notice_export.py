@@ -45,6 +45,15 @@ def _cell(ws, ref, value=None, *, bold=False, size=11, h="center", fmt=None, fil
     return c
 
 
+def _label_cell(ws, r, label, fill):
+    """구분 칸 — 융자명과 (차입금 코드)를 두 줄로 나누고 줄 수만큼 행 높이를 늘린다."""
+    text = split_label(label)
+    _cell(ws, f"B{r}", text, fill=fill, wrap=True)
+    lines = text.count("\n") + 1
+    if lines > 1:
+        ws.row_dimensions[r].height = max(ws.row_dimensions[r].height or 0, 16.5 * lines)
+
+
 def _merge(ws, rng, **kw):
     ws.merge_cells(rng)
     first = rng.split(":")[0]
@@ -55,6 +64,24 @@ def _merge(ws, rng, **kw):
             c.border = BORDER
 
 
+def split_label(label: str) -> str:
+    """'주택도시기금 (2018-12-28_주택-00)' → 두 줄('주택도시기금' / '(2018-12-28_주택-00)') — 구분 칸에서 잘리지 않게."""
+    s = str(label or "")
+    return s.replace(" (", "\n(", 1) if " (" in s else s
+
+
+def text_units(s: str) -> float:
+    """글자 폭(엑셀 열 너비 단위 근사) — 한글·전각은 2, 나머지는 1."""
+    return sum(2 if ord(c) > 0x2E7F else 1 for c in s)
+
+
+def label_col_width(data: dict, base: float = 17.4) -> float:
+    """구분 칸 너비 — 가장 긴 줄이 들어가도록(최소는 원래 양식 너비)."""
+    lines = [ln for key in ("interest_periods", "balances", "payments") for x in data.get(key, [])
+             for ln in split_label(x.get("label", "")).split("\n")]
+    return max(base, max((text_units(ln) for ln in lines), default=0) * 1.05 + 2)
+
+
 def build_notice_workbook(data: dict) -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -62,7 +89,7 @@ def build_notice_workbook(data: dict) -> bytes:
     n = len(data["payments"])
 
     ws.column_dimensions["A"].width = 1.6
-    ws.column_dimensions["B"].width = 17.4
+    ws.column_dimensions["B"].width = label_col_width(data)
     ws.column_dimensions["C"].width = 19.5
     ws.column_dimensions["D"].width = 16.5
     ws.column_dimensions["E"].width = 16.5
@@ -109,7 +136,7 @@ def build_notice_workbook(data: dict) -> bytes:
     for i, p in enumerate(data["interest_periods"]):
         r = int_start + i
         fill = IPMT_FILL if p["ipmt"] else None
-        _cell(ws, f"B{r}", p["label"], fill=fill)
+        _label_cell(ws, r, p["label"], fill)
         _cell(ws, f"C{r}", date.fromisoformat(p["start"]), fmt=DATE_FMT, fill=fill)
         _cell(ws, f"D{r}", date.fromisoformat(p["end"]), fmt=DATE_FMT, fill=fill)
         _cell(ws, f"E{r}", f"=D{r}-C{r}", fmt="General", fill=fill)
@@ -122,7 +149,7 @@ def build_notice_workbook(data: dict) -> bytes:
     for i, b in enumerate(data["balances"]):
         r, pr = bal_start + i, pay_start + i
         fill = IPMT_FILL if b["ipmt"] else None
-        _cell(ws, f"B{r}", b["label"], fill=fill)
+        _label_cell(ws, r, b["label"], fill)
         _cell(ws, f"C{r}", b["assigned_amount"], fmt=MONEY, fill=fill, h="right")
         _cell(ws, f"D{r}", f"=C{pr}", fmt=MONEY, fill=fill, h="right")
         _cell(ws, f"E{r}", f"=E{pr}", fmt=MONEY, fill=fill, h="right")
@@ -137,7 +164,7 @@ def build_notice_workbook(data: dict) -> bytes:
     for i, p in enumerate(data["payments"]):
         r = pay_start + i
         fill = IPMT_FILL if p["ipmt"] else None
-        _cell(ws, f"B{r}", p["label"], fill=fill)
+        _label_cell(ws, r, p["label"], fill)
         _cell(ws, f"C{r}", p["balance_before"], fmt=MONEY, fill=fill, h="right")
         _cell(ws, f"D{r}", round(p["rate"] / 100, 8), fmt="0.000%", fill=fill)
         _cell(ws, f"E{r}", p["principal"], fmt=MONEY, fill=fill, h="right")

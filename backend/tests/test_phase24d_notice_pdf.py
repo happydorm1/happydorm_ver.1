@@ -47,3 +47,21 @@ def test_clear_message_when_no_font(monkeypatch):
     with pytest.raises(PdfUnavailableError) as e:
         make_pdf(DATA)
     assert "한글 글꼴" in str(e.value)
+
+
+def test_long_label_wraps_in_excel_and_pdf():
+    """'융자명 (차입금 코드)'처럼 긴 구분은 두 줄로 나누고 칸 너비·행 높이를 맞춘다(2026-11-23 잘림 수정)."""
+    import io
+    import openpyxl
+    from app.engine.notice_export import build_notice_workbook, split_label
+    long = "주택도시기금 (2018-12-28_주택-00)"
+    d = {**DATA, "interest_periods": [{**DATA["interest_periods"][0], "label": long}],
+         "balances": [{**DATA["balances"][0], "label": long}], "payments": [{**DATA["payments"][0], "label": long}]}
+    assert split_label(long) == "주택도시기금\n(2018-12-28_주택-00)"
+    ws = openpyxl.load_workbook(io.BytesIO(build_notice_workbook(d))).active
+    assert ws.column_dimensions["B"].width > 17.4
+    cell = ws["B13"]
+    assert cell.value == "주택도시기금\n(2018-12-28_주택-00)" and cell.alignment.wrap_text
+    assert ws.row_dimensions[13].height >= 33
+    if HAS_FONT:
+        assert notice_pdf.build_notice_pdf(d).startswith(b"%PDF")

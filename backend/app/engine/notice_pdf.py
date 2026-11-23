@@ -44,13 +44,14 @@ def _won(v) -> str:
 
 
 class _Doc(FPDF):
-    def __init__(self, reg: str, bold: str):
+    def __init__(self, reg: str, bold: str, label_w: float = _RATIO[0]):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.set_margins(15, 18, 15)
         self.set_auto_page_break(True, 15)
         self.add_font("K", "", reg)
         self.add_font("K", "B", bold)
-        self.cols = [w * (210 - 30) / sum(_RATIO) for w in _RATIO]
+        ratio = (label_w,) + _RATIO[1:]
+        self.cols = [w * (210 - 30) / sum(ratio) for w in ratio]
 
     def section(self, text: str):
         self.ln(3)
@@ -83,8 +84,9 @@ class _Doc(FPDF):
 
 
 def build_notice_pdf(data: dict, font_path: str = "") -> bytes:
+    from app.engine.notice_export import label_col_width, split_label
     reg, bold = _fonts(font_path)
-    pdf = _Doc(reg, bold)
+    pdf = _Doc(reg, bold, label_col_width(data))
     pdf.set_title(data.get("title", "안내공문"))
     pdf.add_page()
     n = len(data["payments"])
@@ -117,7 +119,7 @@ def build_notice_pdf(data: dict, font_path: str = "") -> bytes:
     for p in periods:
         f = IPMT if p["ipmt"] else None
         days = (date.fromisoformat(p["end"]) - date.fromisoformat(p["start"])).days
-        pdf.row([(1, p["label"], "C", f, False), (1, p["start"], "C", f, False), (1, p["end"], "C", f, False),
+        pdf.row([(1, split_label(p["label"]), "C", f, False), (1, p["start"], "C", f, False), (1, p["end"], "C", f, False),
                  (1, str(days), "C", f, False)])
     # 비고 병합 칸
     x = pdf.l_margin + sum(pdf.cols[:4]); w = sum(pdf.cols[4:6]); hh = pdf.get_y() - y_top
@@ -136,7 +138,7 @@ def build_notice_pdf(data: dict, font_path: str = "") -> bytes:
         f = IPMT if b["ipmt"] else None
         before, prin = p["balance_before"], p["principal"]
         after = before - prin
-        pdf.row([(1, b["label"], "C", f, False), (1, _won(b["assigned_amount"]), "R", f, False), (1, _won(before), "R", f, False),
+        pdf.row([(1, split_label(b["label"]), "C", f, False), (1, _won(b["assigned_amount"]), "R", f, False), (1, _won(before), "R", f, False),
                  (1, _won(prin), "R", f, False), (1, _won(after), "R", f, False),
                  (1, "TRUE" if before - prin == after else "FALSE", "C", f, True)])
 
@@ -147,7 +149,7 @@ def build_notice_pdf(data: dict, font_path: str = "") -> bytes:
     for p in pays:
         f = IPMT if p["ipmt"] else None
         tot["c"] += p["balance_before"]; tot["e"] += p["principal"]; tot["f"] += p["interest"]
-        pdf.row([(1, p["label"], "C", f, False), (1, _won(p["balance_before"]), "R", f, False), (1, f"{p['rate']:.3f}%", "C", f, False),
+        pdf.row([(1, split_label(p["label"]), "C", f, False), (1, _won(p["balance_before"]), "R", f, False), (1, f"{p['rate']:.3f}%", "C", f, False),
                  (1, _won(p["principal"]), "R", f, False), (1, _won(p["interest"]), "R", f, False),
                  (1, _won(p["principal"] + p["interest"]), "R", f, False)])
     pdf.row([(1, "합 계", "C", TOTAL, True), (1, _won(tot["c"]), "R", TOTAL, True), (1, "-", "C", TOTAL, True),
