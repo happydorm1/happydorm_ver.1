@@ -15,6 +15,7 @@ const label = (t: string) => TYPE[t] ?? (t.startsWith("REPAYMENT_D") ? { label: 
 /** 알림함(§32~33) — 상환일 D-15/10/5/3/1(영업일), 금리변동 D-30 */
 export function NotificationsPage({ me, asOf }: { me: Me | null; asOf: string }) {
   const [unread, setUnread] = useState(false);
+  const spc = me?.role === "SPC_MANAGER";
   const { data, error, loading, reload } = useAsync<NotificationItem[]>(() => api.notifications(unread), [unread]);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -44,8 +45,9 @@ export function NotificationsPage({ me, asOf }: { me: Me | null; asOf: string })
                   <p className="text-sm text-ink-2 mt-1 break-words">{n.body}</p>
                   <div className="text-xs text-ink-3 mt-1">{fmtDateTime(n.created_at)} ·
                     <a className="underline ml-1" href={href(`loans/${n.loan_id}`, { tab: "schedule" })}>원리금 테이블</a> ·
-                    <a className="underline ml-1" href={href("payments", { tab: "loan", loan: n.loan_id })}>납부</a> ·
-                    <a className="underline ml-1" href={href("notices", { tab: "issue", dormitory: n.dormitory_id })}>공문</a></div>
+                    {spc ? <a className="underline ml-1" href={href("notices/received", typeof n.payload?.notice_id === "string" ? { open: n.payload.notice_id } : {})}>공문</a>
+                      : <><a className="underline ml-1" href={href("payments", { tab: "loan", loan: n.loan_id })}>납부</a> ·
+                        <a className="underline ml-1" href={href("notices", { tab: "issue", dormitory: n.dormitory_id })}>공문</a></>}</div>
                 </div>
                 {!n.is_read && <Button size="sm" onClick={() => api.readNotification(n.id).then(() => reload(), (e) => setErr(e.message))}>읽음</Button>}
               </li>);

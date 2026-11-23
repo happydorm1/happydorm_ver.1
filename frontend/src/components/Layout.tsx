@@ -8,7 +8,7 @@ const ROLE_LABEL: Record<Role, string> = {
 };
 
 // 메뉴 구성(Phase 21, 2차 요청서) — 3수준 트리. 하위가 있는 항목은 눌러서 펼치고 접는다(Phase 22).
-type Who = "all" | "foundation" | "writer" | "admin" | "staff";
+type Who = "all" | "foundation" | "writer" | "admin" | "staff" | "spc";
 export type NavNode = { label: string; route?: string; who?: Who; children?: NavNode[] };
 export const MENU: NavNode[] = [
   { label: "대시보드", route: "dashboard" },
@@ -19,9 +19,10 @@ export const MENU: NavNode[] = [
     { label: "이벤트 등록", route: "events", who: "foundation" },
     { label: "차입금 관리", route: "loans" }] },
   { label: "원리금 상환", children: [
-    { label: "안내공문", who: "staff", children: [
+    { label: "안내공문", children: [
       { label: "발송대상 현황", route: "notices/targets", who: "writer" },
-      { label: "발송완료", route: "notices/issued", who: "staff" }] },
+      { label: "발송완료", route: "notices/issued", who: "staff" },
+      { label: "접수공문", route: "notices/received", who: "spc" }] },
     { label: "입금 확인·승인", route: "deposits", who: "staff" },
     { label: "상환 실적 관리", route: "payments", who: "staff" }] },
   { label: "마이페이지", children: [{ label: "알림", route: "notifications" }, { label: "기준정보", route: "admin/reference", who: "writer" }] },
@@ -103,6 +104,7 @@ function allowed(who: Who | undefined, role?: Role) {
   if (!who || who === "all") return true;
   if (!role) return false;
   if (who === "admin") return role === "SYSTEM_ADMIN";
+  if (who === "spc") return role === "SPC_MANAGER";   // 기숙사 측(SPC 담당자) 전용 화면
   if (who === "writer") return role === "SYSTEM_ADMIN" || role === "FOUNDATION_FUND_MANAGER";
   if (who === "staff") return role !== "SPC_MANAGER";   // 재단 직원(관리자·자금담당·결재권자·조회자)
   return role !== "SPC_MANAGER" && role !== "VIEWER";

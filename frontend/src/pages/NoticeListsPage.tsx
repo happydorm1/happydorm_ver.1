@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, downloadFile } from "../api/client";
 import type { Contact, Me, Notice as NoticeT, NoticesIssued, NoticeStatusItem, NoticeTargets } from "../api/types";
-import { MailDialog } from "./NoticesPage";
+import { MailDialog, NoticePreview } from "./NoticesPage";
 import { Badge, Button, Card, Field, Loading, Modal, Notice, PageHeader, fmtDateTime, inputCls, useAsync } from "../components/ui";
 import { compactWon, won } from "../lib/format";
 import { canWrite } from "../lib/perm";
@@ -267,6 +267,143 @@ export function NoticeIssuedPage({ me, asOf, remindId }: { me: Me | null; asOf: 
         </Card>
       )}
       {remind && <ReminderMail noticeId={remind.notice_id} dormId={remind.dormitory_id} overdue={Boolean(remind.overdue)} onClose={() => setRemind(null)} />}
+    </div>
+  );
+}
+
+/** SPC 담당자 전용 '접수공문'(2026-11-22) — 우리 기숙사로 발급된 안내공문을 보고, 공문별 진행(발급→접수→입금 확인→완료)을 확인한다.
+ *  공문을 열거나 내려받으면 재단 쪽에 '수신 확인'으로 기록된다. 재단용 작성·발급·메일 기능은 보이지 않는다. */
+const SPC_STAGES: { key: Stage | "all"; label: string; hint: string; tone: string }[] = [
+  { key: "all", label: "전체", hint: "조회 기간에 받은 공문", tone: "border-line" },
+  { key: "unreceived", label: "새 공문", hint: "아직 열어 보지 않은 공문", tone: "border-warning" },
+  { key: "waiting", label: "입금 대기", hint: "공문 확인, 납부기한 전", tone: "border-line" },
+  { key: "soon", label: "기한 임박", hint: "납부기한 영업일 D-3 이내, 입금 전", tone: "border-critical" },
+  { key: "overdue", label: "기한 경과", hint: "납부기한이 지났는데 입금이 확인되지 않음(일부 포함)", tone: "border-critical" },
+  { key: "checking", label: "입금 확인 중", hint: "재단이 입금을 확인하고 있음", tone: "border-brand" },
+  { key: "done", label: "완료", hint: "재단이 입금을 확인함", tone: "border-good" },
+];
+
+function spcPayBadge(x: NoticeStatusItem) {
+  switch (x.pay_status) {
+    case "PAID": return <Badge tone="good">입금 확인 완료</Badge>;
+    case "CHECKING": return <Badge tone="brand">재단 확인 중</Badge>;
+    case "PARTIAL": return <Badge tone="critical">{x.overdue ? "일부 입금 · 기한 경과" : "일부 입금"}</Badge>;
+    case "OVERDUE": return <Badge tone="critical">미입금 · 기한 경과</Badge>;
+    case "UNPAID": return <Badge>입금 전</Badge>;
+    default: return <span className="text-ink-3">-</span>;
+  }
+}
+
+export function NoticeReceivedPage({ me, openId }: { me: Me | null; openId?: string }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [draft, setDraft] = useState({ from: addDays(today, -365), to: "", dorm: "" });
+  const [q, setQ] = useState(draft);
+  const { data, error, loading, reload } = useAsync<NoticesIssued>(() => api.noticesIssued({
+    date_from: q.from || undefined, date_to: q.to || undefined, dormitory_id: q.dorm || undefined }), [JSON.stringify(q)]);
+  const [err, setErr] = useState<string | null>(null);
+  const [stage, setStage] = useState<Stage | "all">("all");
+  const [view, setView] = useState<NoticeT | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  const [pendingOpen, setPendingOpen] = useState(openId);
+  const canDownload = me?.can_download ?? false;
+  const dorms = [...new Map((data?.items ?? []).map((x) => [x.dormitory_id, x.dormitory_name])).entries()];
+  const counts = new Map<string, number>();
+  for (const x of data?.items ?? []) counts.set(stageOf(x), (counts.get(stageOf(x)) ?? 0) + 1);
+  const shown = (data?.items ?? []).filter((x) => stage === "all" || stageOf(x) === stage);
+
+  async function open(id: string) {
+    setOpening(id); setErr(null);
+    try { setView(await api.notice(id)); reload(); }      // 여는 순간 재단에 '수신 확인'으로 기록
+    catch (e) { setErr(e instanceof Error ? e.message : "공문을 열지 못했습니다."); }
+    finally { setOpening(null); }
+  }
+  // 알림의 '공문' 링크로 들어오면 해당 공문을 바로 연다
+  useEffect(() => {
+    if (pendingOpen && data) { setPendingOpen(undefined); void open(pendingOpen); }
+  }, [pendingOpen, data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dl = (x: { notice_id: string; title: string }, fmt: "xlsx" | "pdf") =>
+    downloadFile(`/notices/${x.notice_id}/download`, { format: fmt }, `${x.title}.${fmt}`).then(reload, (e) => setErr(e.message));
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="접수공문" sub="우리 기숙사로 발급된 원리금 상환 안내공문입니다. 공문을 열어 보거나 내려받으면 재단에 '수신 확인'으로 알려집니다. 입금 여부는 재단이 은행 입금을 확인한 뒤 바뀝니다." />
+      <form role="search" aria-label="접수공문 검색조건" className="bg-surface border border-line rounded-xl px-4 py-3 flex flex-wrap gap-3 items-end"
+        onSubmit={(e) => { e.preventDefault(); setQ(draft); }}>
+        <Field label="상환예정일 기간">
+          <div className="flex items-center gap-1">
+            <input type="date" className={inputCls} aria-label="기간 시작" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
+            <span>~</span>
+            <input type="date" className={inputCls} aria-label="기간 종료" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+          </div>
+        </Field>
+        {dorms.length > 1 && <Field label="기숙사">
+          <select className={inputCls} aria-label="기숙사" value={draft.dorm} onChange={(e) => setDraft({ ...draft, dorm: e.target.value })}>
+            <option value="">전체</option>{dorms.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select></Field>}
+        <Button type="submit" variant={JSON.stringify(draft) !== JSON.stringify(q) ? "primary" : "secondary"} className="ml-auto mb-0.5">조회</Button>
+      </form>
+      {(error || err) && <Notice tone="error" onClose={() => setErr(null)}>{error ?? err}</Notice>}
+      {data && (
+        <section aria-label="진행 단계 요약" className="grid gap-2 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
+          {SPC_STAGES.map((s) => {
+            const n = s.key === "all" ? data.count : counts.get(s.key) ?? 0;
+            const on = stage === s.key;
+            return (
+              <button key={s.key} type="button" aria-pressed={on} title={s.hint} onClick={() => setStage(on && s.key !== "all" ? "all" : s.key)}
+                className={`text-left rounded-xl border-2 px-3 py-2 bg-surface ${on ? `${s.tone} ring-2 ring-offset-1 ring-brand/40` : "border-line"} hover:bg-surface-2`}>
+                <div className="text-xs text-ink-2">{s.label}</div>
+                <div className={`text-xl font-bold tabular ${n && (s.key === "soon" || s.key === "overdue" || s.key === "unreceived") ? "text-critical-ink" : ""}`}>{n}<span className="text-sm font-normal">건</span></div>
+              </button>);
+          })}
+        </section>
+      )}
+      {!data ? <Loading /> : (
+        <Card title={stage === "all" ? `접수공문 ${data.count}건` : `${SPC_STAGES.find((s) => s.key === stage)?.label} ${shown.length}건`}
+          actions={<span className="text-xs text-ink-2">새 공문 <b className={data.unreceived ? "text-warning-ink" : ""}>{data.unreceived}건</b></span>}>
+          <div className={`overflow-x-auto ${loading ? "opacity-60" : ""}`}>
+            {shown.length === 0 ? <p className="text-sm text-ink-3 py-3">조건에 맞는 공문이 없습니다.</p> : (
+              <table className="w-full text-sm" aria-label="접수공문 목록">
+                <thead><tr>{["상환예정일", "납부기한", "기숙사", "공문 · 진행", "납부금액", "발급일시", "접수", "입금", ""].map((h, i) =>
+                  <th key={h + i} scope="col" className={`${th} ${i === 4 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
+                <tbody>{shown.map((x) => (
+                  <tr key={x.notice_id} className="border-t border-line align-top">
+                    <td className="px-3 py-2 tabular whitespace-nowrap">{x.due_date}</td>
+                    <td className="px-3 py-2 tabular whitespace-nowrap">{x.payment_deadline}
+                      {x.due_soon && <div className="text-[11px] text-critical-ink font-semibold">D-{x.days_left}</div>}</td>
+                    <td className="px-3 py-2 min-w-[120px] font-medium">{x.dormitory_name}</td>
+                    <td className="px-3 py-2 min-w-[240px] break-words">
+                      <button type="button" className="text-left underline decoration-line hover:decoration-ink" onClick={() => open(x.notice_id)}>{x.title}</button>
+                      <Stepper x={x} /></td>
+                    <td className="px-3 py-2 text-right tabular whitespace-nowrap font-semibold">{x.total != null ? won(x.total) : "-"}</td>
+                    <td className="px-3 py-2 text-xs text-ink-2 whitespace-nowrap">{fmtDateTime(x.issued_at)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{x.received
+                      ? <><Badge tone="good">접수 완료</Badge><div className="text-[11px] text-ink-3 mt-0.5">{fmtDateTime(x.received_at)}</div></>
+                      : <Badge tone="warning">새 공문</Badge>}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{spcPayBadge(x)}
+                      {x.paid_date && <div className="text-[11px] text-ink-3 mt-0.5 tabular">입금 {x.paid_date}{x.paid_time ? ` ${x.paid_time.slice(0, 5)}` : ""}</div>}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <span className="inline-flex gap-1">
+                        <Button size="sm" variant="primary" disabled={opening === x.notice_id} onClick={() => open(x.notice_id)}>{opening === x.notice_id ? "여는 중…" : "공문 보기"}</Button>
+                        {canDownload && <Button size="sm" onClick={() => dl(x, "pdf")}>PDF</Button>}
+                        {canDownload && <Button size="sm" onClick={() => dl(x, "xlsx")}>Excel</Button>}
+                      </span>
+                    </td>
+                  </tr>))}</tbody>
+              </table>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-ink-3">같은 상환예정일 공문이 다시 발급되면 최근 발급본만 보이며, 새 발급본은 다시 '새 공문'으로 표시됩니다.
+            입금은 공문의 납부금액 전액을 납부기한까지 안내된 계좌로 보내 주세요. 재단이 은행 입금을 확인하면 '입금 확인 완료'로 바뀝니다.</p>
+        </Card>
+      )}
+      {view && <Modal wide title={view.title} onClose={() => setView(null)} footer={<>
+        {canDownload && <Button onClick={() => dl({ notice_id: view.id, title: view.title }, "pdf")}>PDF 내려받기</Button>}
+        {canDownload && <Button onClick={() => dl({ notice_id: view.id, title: view.title }, "xlsx")}>Excel 내려받기</Button>}
+        <Button variant="primary" onClick={() => setView(null)}>닫기</Button></>}>
+        <p className="mb-2 text-xs text-ink-2">상환예정일 {view.due_date} · 납부기한 {view.payment_deadline} · 발급 {fmtDateTime(view.created_at)}
+          {view.received_at && <> · 접수 {fmtDateTime(view.received_at)}</>}</p>
+        <NoticePreview d={view.generated_data} title="공문 내용" />
+      </Modal>}
     </div>
   );
 }

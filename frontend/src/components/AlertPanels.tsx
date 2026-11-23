@@ -1,3 +1,4 @@
+import { href } from "../lib/router";
 import { useState, type ReactNode } from "react";
 import { downloadFile } from "../api/client";
 import type { Alerts, NoticeStatus, NoticeStatusItem } from "../api/types";
@@ -140,7 +141,8 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
   const received = notices.scope === "SPC" && (
     <Panel key="rec" title={receivedTitle} count={notices.received.count} tone={notices.received.unconfirmed ? "warning" : "neutral"}
       icon="📨" empty="받은 안내공문이 없습니다.">
-      {notices.received.unconfirmed > 0 && <p className="text-xs text-warning-ink pb-1">새 공문 {notices.received.unconfirmed}건 — 내려받으면 수신 확인됩니다.</p>}
+      {notices.received.unconfirmed > 0 && <p className="text-xs text-warning-ink pb-1">새 공문 {notices.received.unconfirmed}건 — 열어 보거나 내려받으면 수신 확인됩니다.</p>}
+      <p className="text-xs pb-1"><a className="underline" href={href("notices/received")}>접수공문 전체 보기 →</a></p>
       {err && <p role="alert" className="text-xs text-critical-ink pb-1">{err}</p>}
       <More title={receivedTitle} items={notices.received.items} render={(x) => (
         <NoticeLine key={x.notice_id} x={x} right={<span className="flex items-center gap-1">

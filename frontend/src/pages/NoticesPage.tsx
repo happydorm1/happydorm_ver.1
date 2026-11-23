@@ -114,10 +114,10 @@ function Issue({ me, asOf, dormId, initialDue }: { me: Me | null; asOf: string; 
 /** 첨부2 공문과 같은 순서(이자기간 → 대출잔액 → 상환금액)로 보여준다 */
 const IPMT_BG = { background: "rgba(146, 208, 80, 0.28)" };   // 초록 음영(IPMT 적용 융자 건) — Excel·PDF 공문과 같은 표시
 
-export function NoticePreview({ d, actions }: { d: NoticeData; actions?: React.ReactNode }) {
+export function NoticePreview({ d, actions, title = "2. 공문 미리보기" }: { d: NoticeData; actions?: React.ReactNode; title?: string }) {
   const th = "px-3 py-2 font-medium text-xs text-ink-2 bg-surface-2";
   return (
-    <Card title="2. 공문 미리보기" actions={actions}>
+    <Card title={title} actions={actions}>
       <div className="space-y-4">
         <div className="text-center">
           <div className="text-lg font-bold">{d.title}</div>

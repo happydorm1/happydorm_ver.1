@@ -15,7 +15,7 @@ import { DeletionsPage } from "./pages/admin/DeletionsPage";
 import { MigrationPage } from "./pages/admin/MigrationPage";
 import { EventsPage } from "./pages/events/EventsPage";
 import { NoticesPage } from "./pages/NoticesPage";
-import { NoticeIssuedPage, NoticeTargetsPage } from "./pages/NoticeListsPage";
+import { NoticeIssuedPage, NoticeTargetsPage, NoticeReceivedPage } from "./pages/NoticeListsPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { DepositsPage } from "./pages/DepositsPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
@@ -67,6 +67,10 @@ export default function App() {
   } else if (section === "payments") {
     title = "상환 실적 관리";
     page = <PaymentsPage me={me} asOf={asOf} tab={route.query.get("tab") === "loan" ? "loan" : "overdue"} loanId={route.query.get("loan") ?? undefined} />;
+  } else if (section === "notices" && me?.role === "SPC_MANAGER") {
+    // SPC 담당자는 재단용 작성·발급 화면 대신 '접수공문'만 본다(공문 알림·옛 링크로 들어와도 여기로)
+    title = "안내공문 · 접수공문";
+    page = <NoticeReceivedPage me={me} openId={route.query.get("open") ?? undefined} />;
   } else if (section === "notices") {
     if (sub === "targets") { title = "안내공문 · 발송대상 현황"; page = <NoticeTargetsPage me={me} asOf={asOf} />; }
     else if (sub === "issued") { title = "안내공문 · 발송완료"; page = <NoticeIssuedPage me={me} asOf={asOf} remindId={route.query.get("remind") ?? undefined} />; }
@@ -88,7 +92,7 @@ export default function App() {
   }
   const navKey = section === "admin" ? `admin/${sub ?? "audit"}`
     : section === "loans" && sub === "new" ? "loans/new"
-    : section === "notices" ? `notices/${sub === "issued" ? "issued" : "targets"}`
+    : section === "notices" ? (me?.role === "SPC_MANAGER" ? "notices/received" : `notices/${sub === "issued" ? "issued" : "targets"}`)
     : section === "schedule" ? "loans" : section ?? "dashboard";
 
   return (
