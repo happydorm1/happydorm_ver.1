@@ -8,6 +8,8 @@ export interface Kpis {
   total_remaining_principal: number;
   this_month_scheduled: number;
   next_month_scheduled: number;
+  next_quarter_scheduled: number;                // Phase 20g
+  next_quarter: { year: number; quarter: number; label: string; from: string; to: string };
   this_year_scheduled: number;
   this_year_interest: number;
   rate_change_upcoming_count: number;

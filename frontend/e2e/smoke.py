@@ -46,11 +46,11 @@ def login(page, email, pw="demo1234!", expect_popup=None):
 
 def table_count(page) -> int:
     txt = page.locator("section[aria-label='차입금 현황'] h2").inner_text()
-    return int(re.search(r"\((\d+)건\)", txt).group(1))
+    return int(re.search(r"차입금 (\d+)건\)", txt).group(1))
 
 
 def wait_count(page, n):
-    expect(page.locator("section[aria-label='차입금 현황'] h2")).to_contain_text(f"({n}건)", timeout=5000)
+    expect(page.locator("section[aria-label='차입금 현황'] h2")).to_contain_text(f"차입금 {n}건)", timeout=5000)
 
 
 with sync_playwright() as p:

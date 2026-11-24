@@ -55,8 +55,8 @@ export function DashboardPage({ asOf, canDownload }: { asOf: string; canDownload
       )}
 
       {!data && loading && (
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-4 xl:grid-cols-5" aria-busy="true" aria-label="불러오는 중">
-          {Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-[92px] rounded-xl bg-surface border border-line animate-pulse" />)}
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4" aria-busy="true" aria-label="불러오는 중">
+          {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-[92px] rounded-xl bg-surface border border-line animate-pulse" />)}
         </div>
       )}
 
@@ -68,8 +68,9 @@ export function DashboardPage({ asOf, canDownload }: { asOf: string; canDownload
           </div>
           <KpiGrid k={data.kpis} period={data.period} />
           <AlertPanels a={data.alerts} notices={data.notices} canDownload={canDownload} onChanged={() => setReloadKey((k) => k + 1)} />
-          <div className="grid gap-4 grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <QuarterChart year={data.quarterly_schedule[0]?.year ?? Number(data.as_of.slice(0, 4))} data={data.quarterly_schedule} />
+          {/* 위 알림 패널(금리변동·미납·확인필요, 3칸)과 같은 3칸 격자 → '미납|확인 필요' 경계와 '차트|재원별' 경계가 일치 */}
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-3 [&>*]:min-w-0">
+            <div className="md:col-span-2 min-w-0 [&>*]:h-full"><QuarterChart year={data.quarterly_schedule[0]?.year ?? Number(data.as_of.slice(0, 4))} data={data.quarterly_schedule} /></div>
             <FundBreakdown data={data.by_fund} />
           </div>
           <LoanTable rows={data.loans} asOf={data.as_of} canDownload={canDownload} />

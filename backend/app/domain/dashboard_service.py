@@ -6,6 +6,7 @@ KPI 정의(§34)
 - 총 잔여원금: 배정금액 − 기준일까지 '예정된' 원금상환액(현재 버전, 유예 회수원금 포함). 실제 납부 여부와 무관한 계획 기준.
   실제로 덜 낸 금액은 '미납'으로 따로 보여준다.
 - 금월/익월 상환예정액: 상환예정일이 기준일의 이번 달/다음 달인 예정 원리금 합계
+- 다음 분기 상환예정액(Phase 20g): 상환예정일이 기준일 다음 분기(3개월 단위, 4분기 다음은 이듬해 1분기)인 예정 원리금 합계
 - 금년 상환예정액·이자예정액: 기준일이 속한 해(1/1~12/31) 전체의 예정 원리금·이자 합계(이미 지난 달 포함) — 화면 표시는 Phase 20에서 뺌(API는 유지)
 - 분기별 상환계획액 / 상환액(Phase 20b): 기준일이 속한 해 1~12월을 1~4분기로.
   계획액 = 원리금 테이블(현재 버전) 예정액, 상환액 = 실제 납부(취소 제외). 둘 다 '상환예정일(회차)'이 속한 분기에 넣어
@@ -85,6 +86,8 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
 
     this_month = as_of.replace(day=1)
     next_month = this_month + relativedelta(months=1)
+    cur_q = (as_of.month - 1) // 3 + 1
+    nq_year, nq = (as_of.year + 1, 1) if cur_q == 4 else (as_of.year, cur_q + 1)   # 다음 분기(Phase 20g)
     month_keys = [_month_key(this_month + relativedelta(months=i)) for i in range(MONTHS_AHEAD)]
     monthly = {k: {"principal": 0, "interest": 0} for k in month_keys}
     quarterly = {q: {"principal": 0, "interest": 0, "due_total": 0} for q in (1, 2, 3, 4)}
@@ -133,6 +136,8 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
                 k["this_month_total"] += m["total"]
             elif mk == _month_key(next_month):
                 k["next_month_total"] += m["total"]
+            if d.year == nq_year and (d.month - 1) // 3 + 1 == nq:
+                k["next_quarter_total"] += m["total"]
             if mk in monthly:
                 monthly[mk]["principal"] += m["principal"]
                 monthly[mk]["interest"] += m["interest"]
@@ -174,6 +179,10 @@ def _build_dashboard(db: Session, user: User, as_of: date, f: LoanFilters, rows,
         "total_remaining_principal": k["total_remaining"],
         "this_month_scheduled": k["this_month_total"],
         "next_month_scheduled": k["next_month_total"],
+        "next_quarter_scheduled": k["next_quarter_total"],
+        "next_quarter": {"year": nq_year, "quarter": nq, "label": f"{nq_year}년 {nq}분기",
+                         "from": date(nq_year, 3 * nq - 2, 1),
+                         "to": date(nq_year, 3 * nq, 1) + relativedelta(months=1, days=-1)},
         "this_year_scheduled": k["year_total"],
         "this_year_interest": k["year_interest"],
         "rate_change_upcoming_count": alerts["rate_changes_upcoming"]["count"],
