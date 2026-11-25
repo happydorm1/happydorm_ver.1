@@ -1,4 +1,4 @@
-"""Phase 11: 안내공문 자동생성 — 첨부2(실제 공문)와 첨부1(원리금 테이블) 대조"""
+"""Phase 11: 안내문 자동생성 — 첨부2(실제 안내문)와 첨부1(원리금 테이블) 대조"""
 import io
 import shutil
 import subprocess
@@ -11,7 +11,7 @@ from _helpers import admin_headers, client, make_loan, make_org, refs, spc_manag
 from openpyxl import load_workbook
 
 EXCEL1 = "/mnt/user-data/uploads/첨부_1__원리금_테이블.xlsx"
-EXCEL2 = "/mnt/user-data/uploads/첨부_2__기숙사별_안내_공문.xlsx"
+EXCEL2 = "/mnt/user-data/uploads/첨부_2__기숙사별_안내_안내문.xlsx"
 ACCOUNT = {"bank_account": "테스트은행 000-00-000000", "account_holder": "테스트기금"}   # 실제 계좌번호는 코드/테스트에 넣지 않는다
 
 
@@ -93,7 +93,7 @@ def test_notice_matches_real_attachment_2():
     # 첨부2는 이 칸을 손으로 옮겨 적어 원본과 어긋나 있다(32,361,800 vs 32,361,807) — 자동연결로 해소되는 오차
     assert 0 < p["interest"] - ws2["F24"].value < 10
 
-    # --- 합계·검증·비고·발급 전 경고
+    # --- 합계·검증·비고·발송 전 경고
     assert d["totals"]["principal"] == d["payments"][0]["principal"] + d["payments"][1]["principal"]
     assert d["totals"]["total"] == d["totals"]["principal"] + d["totals"]["interest"]
     assert all(x["check"] for x in d["balances"])
@@ -145,7 +145,7 @@ def test_issue_excel_pdf_formulas_and_snapshot_immutability():
         pdf = client.get(f"/api/v1/notices/{nid}/download", params={"format": "pdf"}, headers=h)
         assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
 
-    # 발급 후 원리금 테이블이 바뀌어도(조기상환) 이미 발급한 공문은 그대로 — 스냅샷
+    # 발송 후 원리금 테이블이 바뀌어도(조기상환) 이미 발송한 안내문은 그대로 — 스냅샷
     assert client.post(f"/api/v1/loans/{loan_a}/events/early-repayment", json={
         "event_date": "2026-09-30", "repay_type": "PARTIAL", "repay_amount": 100_000_000}, headers=h).status_code == 201
     again = client.get(f"/api/v1/notices/{nid}", headers=h).json()["generated_data"]
@@ -186,7 +186,7 @@ def test_notice_validation_warnings_and_permissions():
     assert sat["payment_deadline"] == "2023-06-03"
     assert any("영업일이 아닙니다" in w and "토요일" in w for w in sat["warnings"])
 
-    # 권한: 양식 등록/발급은 재단 담당자만, SPC 담당자는 자기 기숙사 공문 조회/다운로드만
+    # 권한: 양식 등록/발송은 재단 담당자만, SPC 담당자는 자기 기숙사 안내문 조회/다운로드만
     assert client.post("/api/v1/document-templates", json={"template_name": "x", "config": ACCOUNT}, headers=spc_h).status_code == 403
     assert client.get(f"/api/v1/dormitories/{dorm_a}/notices/preview", params={"due_date": "2023-05-31"}, headers=spc_h).status_code == 403
     nid = client.post(f"/api/v1/dormitories/{dorm_a}/notices", json={"due_date": "2023-05-31"}, headers=h).json()["id"]
@@ -196,7 +196,7 @@ def test_notice_validation_warnings_and_permissions():
     assert other.status_code == 422
     assert client.get(f"/api/v1/dormitories/{dorm_b}/notices", headers=spc_h).status_code == 403
 
-    # 발급은 변경이력에 남는다
+    # 발송은 변경이력에 남는다
     logs = client.get(f"/api/v1/loans/{loan_a}/audit-logs", params={"table_name": "generated_document"}, headers=h).json()
     assert len(logs) >= 1 and logs[0]["action"] == "CREATE" and "원리금 계산내역" in logs[0]["after_value"]
 

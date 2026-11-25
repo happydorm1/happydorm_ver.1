@@ -1,4 +1,4 @@
-"""Phase 21 — 메뉴 재구성: 기숙사별 입금계좌, 안내공문 발송대상/발송완료, 자금담당자 차입금 삭제, 차입금 목록 필드."""
+"""Phase 21 — 메뉴 재구성: 기숙사별 입금계좌, 안내문 발송대상/발송완료, 자금담당자 차입금 삭제, 차입금 목록 필드."""
 import uuid
 
 from _helpers import admin_headers, client, make_loan, make_org, spc_manager_headers
@@ -54,7 +54,7 @@ def test_notice_targets_and_issued_lists():
     t2 = client.get("/api/v1/notices/targets", params={"as_of": "2023-05-20", "date_from": "2023-01-01", "date_to": "2023-12-31",
                                                      "dormitory_id": dorm}, headers=h).json()
     assert [x["due_date"] for x in t2["items"]] == ["2023-05-31", "2023-08-31", "2023-11-30"]
-    # 발급하면 발송대상에서 빠지고 발송완료로
+    # 발송하면 발송대상에서 빠지고 발송완료로
     nid = client.post(f"/api/v1/dormitories/{dorm}/notices", json={"due_date": "2023-05-31"}, headers=h).json()["id"]
     assert client.get("/api/v1/notices/targets", params={"as_of": "2023-05-20", "dormitory_id": dorm}, headers=h).json()["count"] == 0
     inc = client.get("/api/v1/notices/targets", params={"as_of": "2023-05-20", "dormitory_id": dorm, "include_issued": "true"}, headers=h).json()

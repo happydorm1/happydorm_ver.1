@@ -1,8 +1,8 @@
 """
-대시보드 개편(Phase 20) E2E — 공문을 발급하므로 '새로 만든 데모 DB'에서 돌린다(브라우저 시계 2026-10-28).
+대시보드 개편(Phase 20) E2E — 안내문을 발송하므로 '새로 만든 데모 DB'에서 돌린다(브라우저 시계 2026-10-28).
     python e2e/dash20.py http://127.0.0.1:8000 [스크린샷 폴더]
-확인: 이름 변경, 분기별 차트(1~4분기), 공문 발급 → 발송예정 '발급완료·미수신' + 미수신 1건(노란 KPI)
-→ SPC 담당자 '안내공문 수신'에서 새 공문 내려받기 → 수신 확인 → 재단 미수신 0, 발송예정 '수신',
+확인: 이름 변경, 분기별 차트(1~4분기), 안내문 발송 → 발송예정 '발송완료·미수신' + 미수신 1건(노란 KPI)
+→ SPC 담당자 '안내문 수신'에서 새 안내문 내려받기 → 수신 확인 → 재단 미수신 0, 발송예정 '수신',
 더보기는 패널이 늘어나지 않고 팝업으로 전체 목록.
 """
 import json
@@ -41,8 +41,8 @@ def nav(page, name):
     page.get_by_role("navigation", name="주 메뉴").get_by_role("link", name=name).click()
 
 
-UP = "section[aria-label='안내공문 발송예정(상환예정)']"
-UNREC = "section[aria-label='안내공문 미수신']"
+UP = "section[aria-label='안내문 발송예정(상환예정)']"
+UNREC = "section[aria-label='안내문 미수신']"
 
 with sync_playwright() as p:
     b = p.chromium.launch()
@@ -59,30 +59,30 @@ with sync_playwright() as p:
     expect(chart.locator("tbody tr", has_text="1분기")).to_contain_text("100%")
     expect(chart.locator("tbody tr", has_text="4분기").locator("td").last).to_have_text("-")   # 도래 회차 없음
     kpis = page.locator("section[aria-label='주요 지표']")
-    expect(kpis).to_contain_text("안내공문 미수신0건")
-    expect(page.locator(UP)).to_contain_text("미발급")
+    expect(kpis).to_contain_text("안내문 미수신0건")
+    expect(page.locator(UP)).to_contain_text("미발송")
 
-    # 미르기숙사 상환일(2026-10-31) 공문 발급
+    # 미르기숙사 상환일(2026-10-31) 안내문 발송
     page.evaluate("location.hash = \'#/notices\'")
     sel = page.get_by_label("기숙사", exact=True)
     sel.select_option(sel.locator("option", has_text="미르기숙사").first.get_attribute("value"))
     page.locator("section", has_text="1. 기숙사·상환예정일").get_by_role("button", name="2026-10-31").click()
-    page.locator("section[aria-label='2. 공문 미리보기']").get_by_role("button", name="이 내용으로 발급").click()
-    page.get_by_role("dialog", name="공문 발급 확인").get_by_role("button", name="발급", exact=True).click()
-    issued = page.locator("section", has_text="발급 이력 — 미르기숙사")
+    page.locator("section[aria-label='2. 안내문 미리보기']").get_by_role("button", name="이 내용으로 발송").click()
+    page.get_by_role("dialog", name="안내문 발송 확인").get_by_role("button", name="발송", exact=True).click()
+    issued = page.locator("section", has_text="발송 이력 — 미르기숙사")
     expect(issued.locator("li")).to_have_count(1)
     expect(issued).to_contain_text("미수신")
 
     nav(page, "대시보드")
-    expect(kpis).to_contain_text("안내공문 미수신1건")
-    expect(page.locator(UP)).to_contain_text("발급완료 · 미수신")
+    expect(kpis).to_contain_text("안내문 미수신1건")
+    expect(page.locator(UP)).to_contain_text("발송완료 · 미수신")
     expect(page.locator(UNREC)).to_contain_text("미르기숙사")
     shot(page, "p01_admin_issued")
 
-    # SPC 담당자(미르기숙사 SPC가 아닌 가람관 SPC) → 이 공문이 보이지 않아야 함
+    # SPC 담당자(미르기숙사 SPC가 아닌 가람관 SPC) → 이 안내문이 보이지 않아야 함
     spc = b.new_page(viewport={"width": 1400, "height": 900}, accept_downloads=True)
     login(spc, "demo-spc@example.com")
-    rec = spc.locator("section[aria-label='안내공문 수신']")
+    rec = spc.locator("section[aria-label='안내문 수신']")
     expect(rec).to_be_visible()
     expect(rec).not_to_contain_text("미르기숙사")
     spc.close()
@@ -111,19 +111,19 @@ with sync_playwright() as p:
         mir.get_by_role("button", name="나중에").click()
     except Exception:
         pass
-    rec = mir.locator("section[aria-label='안내공문 수신']")
+    rec = mir.locator("section[aria-label='안내문 수신']")
     expect(rec).to_contain_text("미르기숙사")
-    expect(rec).to_contain_text("새 공문")
+    expect(rec).to_contain_text("새 안내문")
     with mir.expect_download():
         rec.get_by_role("button", name="내려받기").first.click()
     expect(rec).to_contain_text("수신 확인")
-    expect(rec).not_to_contain_text("새 공문")
+    expect(rec).not_to_contain_text("새 안내문")
     shot(mir, "p02_spc_received")
     mir.close()
 
     nav(page, "대시보드")
-    expect(kpis).to_contain_text("안내공문 미수신0건")
-    expect(page.locator(UP)).to_contain_text("발급완료 · 수신")
+    expect(kpis).to_contain_text("안내문 미수신0건")
+    expect(page.locator(UP)).to_contain_text("발송완료 · 수신")
 
     # 더보기 → 팝업(패널 높이 그대로). 미납 목록을 12건으로 늘린 응답으로 확인
     def fake(route):
@@ -149,5 +149,5 @@ with sync_playwright() as p:
     expect(dlg).to_be_hidden()
     b.close()
 
-print("E2E OK: 시스템명, 분기별 원리금 상환 현황(계획·실적, 미상환·달성률), 공문 발급 → 발송예정 발급완료·미수신 + 미수신 KPI, 다른 SPC에는 안 보임, "
+print("E2E OK: 시스템명, 분기별 원리금 상환 현황(계획·실적, 미상환·달성률), 안내문 발송 → 발송예정 발송완료·미수신 + 미수신 KPI, 다른 SPC에는 안 보임, "
       "해당 SPC 담당자 내려받기 → 수신 확인 → 재단 미수신 0·발송예정 '수신', 더보기 팝업(패널 높이 유지)")

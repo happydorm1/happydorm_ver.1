@@ -31,7 +31,7 @@ export function KpiGrid({ k, period }: { k: Kpis; period: { from: string; to: st
       <Tile label="다음 분기 상환예정" hint={k.next_quarter.label} value={`${compactWon(k.next_quarter_scheduled)}원`}
         full={`${won(k.next_quarter_scheduled)} (${k.next_quarter.from} ~ ${k.next_quarter.to})`} sub="원금+이자" />
       {k.notice_unreceived_count !== undefined && (
-        <Tile label="안내공문 미수신" value={`${num(k.notice_unreceived_count)}건`} sub="발급 후 기숙사 측 미확인"
+        <Tile label="안내문 미수신" value={`${num(k.notice_unreceived_count)}건`} sub="발송 후 기숙사 측 미확인"
           tone="warning" />
       )}
       <Tile label="미납" value={`${num(k.overdue_count)}건`} full={won(k.overdue_amount)}

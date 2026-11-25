@@ -6,7 +6,7 @@ import { Badge, Button, Card, Loading, Notice, PageHeader, fmtDateTime, useAsync
 import { isAdmin } from "../../lib/perm";
 import { refreshRefData } from "../../lib/refdata";
 
-const TYPE: Record<string, string> = { DORMITORY: "기숙사", LOAN: "차입금", SCHEDULE: "원리금 테이블", NOTICE: "안내공문", EVENT: "이벤트" };
+const TYPE: Record<string, string> = { DORMITORY: "기숙사", LOAN: "차입금", SCHEDULE: "원리금 테이블", NOTICE: "안내문", EVENT: "이벤트" };
 
 /** Phase 18c: 관리자 삭제(숨김)·복구 — 기숙사 삭제와 전체 삭제 내역·복구 */
 export function DeletionsPage({ me }: { me: Me | null }) {
@@ -16,12 +16,12 @@ export function DeletionsPage({ me }: { me: Me | null }) {
   const changed = (m: string) => { setMsg(m); setKey((k) => k + 1); refreshRefData(); };
   return (
     <div className="space-y-4">
-      <PageHeader title="삭제·복구" sub="기숙사·차입금·원리금 테이블·안내공문을 숨김 삭제하고, 필요하면 되살립니다. 모든 삭제·복구는 사유와 함께 기록됩니다." />
+      <PageHeader title="삭제·복구" sub="기숙사·차입금·원리금 테이블·안내문을 숨김 삭제하고, 필요하면 되살립니다. 모든 삭제·복구는 사유와 함께 기록됩니다." />
       {msg && <Notice tone="success" onClose={() => setMsg(null)}>{msg}</Notice>}
       <Dormitories key={`d${key}`} onChanged={changed} />
       <History key={`h${key}`} onChanged={changed} />
       <p className="text-xs text-ink-3 px-1">차입금은 차입금 상세 위쪽 '차입금 삭제', 원리금 테이블은 원리금 테이블 탭의 '이 버전 삭제'·'전체 삭제',
-        이벤트는 이벤트 등록 → 이벤트 이력(또는 차입금 상세 → 이벤트·변경이력)의 '삭제', 안내공문은 발급 이력의 '삭제'로 지웁니다.
+        이벤트는 이벤트 등록 → 이벤트 이력(또는 차입금 상세 → 이벤트·변경이력)의 '삭제', 안내문은 발송 이력의 '삭제'로 지웁니다.
         이벤트·버전은 가장 최근 것부터 지우고, 복구는 지운 반대 순서(나중에 지운 것부터)로 합니다.</p>
     </div>
   );
@@ -49,7 +49,7 @@ function Dormitories({ onChanged }: { onChanged: (m: string) => void }) {
         </div>
       )}
       {del && <DeleteDialog title="기숙사 삭제" target={`${del.dormitory_name} (${del.school_name})`}
-        effects={[`소속 차입금 ${del.loan_count}건과 그 원리금 테이블·납부·안내공문·알림이 모든 화면·대시보드·Excel에서 빠집니다.`,
+        effects={[`소속 차입금 ${del.loan_count}건과 그 원리금 테이블·납부·안내문·알림이 모든 화면·대시보드·Excel에서 빠집니다.`,
           "삭제 중에는 그 차입금 코드로 새 차입금을 등록할 수 있습니다."]}
         onClose={() => setDel(null)}
         onConfirm={async (reason) => { await api.deleteDormitory(del.id, reason); setDel(null); onChanged(`'${del.dormitory_name}' 기숙사를 삭제했습니다.`); }} />}

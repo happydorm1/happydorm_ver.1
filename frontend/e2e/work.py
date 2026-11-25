@@ -1,5 +1,5 @@
 """
-업무 화면 2차(이벤트·실제 상환·공문·알림·관리자) E2E — 데이터를 바꾸므로 '새로 만든 데모 DB'에서 돌린다.
+업무 화면 2차(이벤트·실제 상환·안내문·알림·관리자) E2E — 데이터를 바꾸므로 '새로 만든 데모 DB'에서 돌린다.
     (백엔드) python -m app.jobs.seed_demo --as-of 2026-10-28  → 빈 데모 DB
     python e2e/work.py http://127.0.0.1:4173 [스크린샷 폴더]
 """
@@ -110,25 +110,25 @@ with sync_playwright() as p:
     page.get_by_role("dialog").get_by_role("button", name="취소 처리").click()
     expect(pays.locator("tr", has_text="E2E 취소")).to_contain_text("취소")
 
-    # 3) 안내공문: 가람관 → 다음 상환일 버튼 → 미리보기 → 발급 → 이력·Excel
+    # 3) 안내문: 가람관 → 다음 상환일 버튼 → 미리보기 → 발송 → 이력·Excel
     page.evaluate("location.hash = \'#/notices\'")
     pick(page.get_by_label("기숙사", exact=True), "가람관")
     page.locator("section", has_text="1. 기숙사·상환예정일").get_by_role("button", name=re.compile(r"^\d{4}-\d{2}-\d{2}$")).first.click()
-    prev = page.locator("section[aria-label='2. 공문 미리보기']")
+    prev = page.locator("section[aria-label='2. 안내문 미리보기']")
     expect(prev).to_contain_text("원리금 계산내역")
     expect(prev).to_contain_text("합 계")
     shot(page, "w04_notice")
-    # 발급 확인 팝업: 취소하면 발급되지 않고, '발급'을 눌러야 발급된다
-    prev.get_by_role("button", name="이 내용으로 발급").click()
-    dlg = page.get_by_role("dialog", name="공문 발급 확인")
-    expect(dlg).to_contain_text("발급 진행하시겠습니까?")
+    # 발송 확인 팝업: 취소하면 발송되지 않고, '발송'을 눌러야 발송된다
+    prev.get_by_role("button", name="이 내용으로 발송").click()
+    dlg = page.get_by_role("dialog", name="안내문 발송 확인")
+    expect(dlg).to_contain_text("발송 진행하시겠습니까?")
     dlg.get_by_role("button", name="취소").click()
     expect(dlg).to_be_hidden()
-    expect(page.get_by_text("공문을 발급했습니다")).to_have_count(0)
-    prev.get_by_role("button", name="이 내용으로 발급").click()
-    dlg.get_by_role("button", name="발급", exact=True).click()
-    expect(page.get_by_text("공문을 발급했습니다")).to_be_visible()
-    issued = page.locator("section", has_text="발급 이력 — 가람관")
+    expect(page.get_by_text("안내문을 발송했습니다")).to_have_count(0)
+    prev.get_by_role("button", name="이 내용으로 발송").click()
+    dlg.get_by_role("button", name="발송", exact=True).click()
+    expect(page.get_by_text("안내문을 발송했습니다")).to_be_visible()
+    issued = page.locator("section", has_text="발송 이력 — 가람관")
     # 수신처: 이메일이 없으면 메일 작성 불가 → 연락처 추가 → 받는 사람이 채워진 메일 작성 링크
     expect(issued.get_by_text("수신처 이메일 없음").first).to_be_visible()
     contacts = page.locator("section", has_text="수신처·연락처 — 가람관")
@@ -230,4 +230,4 @@ with sync_playwright() as p:
         assert sw <= 390, f"{path} 가로 넘침 {sw}"
     b.close()
     assert not errors, errors
-print("E2E OK: 이벤트 등록·취소, 미납 현황·납부 입력·취소, 공문 미리보기·발급·Excel, 알림 점검·읽음, 공휴일·사용자 등록·감사로그, 역할별 메뉴, 휴대폰 폭")
+print("E2E OK: 이벤트 등록·취소, 미납 현황·납부 입력·취소, 안내문 미리보기·발송·Excel, 알림 점검·읽음, 공휴일·사용자 등록·감사로그, 역할별 메뉴, 휴대폰 폭")

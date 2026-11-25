@@ -1,11 +1,11 @@
 """
-Phase 20: 안내공문 발급·수신 현황(대시보드).
+Phase 20: 안내문 발송·수신 현황(대시보드).
 
-- 수신: 기숙사 측(그 기숙사 SPC 담당자)이 공문을 열람·내려받거나 공문 발급 알림을 읽으면 처음 한 번 기록한다(mark_received).
+- 수신: 기숙사 측(그 기숙사 SPC 담당자)이 안내문을 열람·내려받거나 안내문 발송 알림을 읽으면 처음 한 번 기록한다(mark_received).
   재단 직원이 열어 보는 것은 수신이 아니다.
-- 같은 기숙사·상환예정일 공문을 다시 발급하면 가장 최근 발급본만 본다(이전 발급본의 수신 여부는 무시).
-- 재단(관리자·자금담당자): '안내공문 발송예정(상환예정)'에 발급완료·수신 여부 표시, '안내공문 미수신' 목록.
-- SPC 담당자: '안내공문 수신' — 자기 기숙사 공문만.
+- 같은 기숙사·상환예정일 안내문을 다시 발송하면 가장 최근 발송본만 본다(이전 발송본의 수신 여부는 무시).
+- 재단(관리자·자금담당자): '안내문 발송예정(상환예정)'에 발송완료·수신 여부 표시, '안내문 미수신' 목록.
+- SPC 담당자: '안내문 수신' — 자기 기숙사 안내문만.
 """
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -17,11 +17,11 @@ from app.models.document import GeneratedDocument
 from app.models.organization import Dormitory, User, UserRole
 
 FOUNDATION_NOTICE_ROLES = (UserRole.SYSTEM_ADMIN, UserRole.FOUNDATION_FUND_MANAGER)
-RECEIVED_LOOKBACK_DAYS = 31     # SPC '안내공문 수신' 목록: 납부기한이 지난 지 한 달 이내 공문까지 보여 준다
+RECEIVED_LOOKBACK_DAYS = 31     # SPC '안내문 수신' 목록: 납부기한이 지난 지 한 달 이내 안내문까지 보여 준다
 
 
 def mark_received(db: Session, doc: GeneratedDocument, user: User, via: str) -> bool:
-    """SPC 담당자가 자기 기숙사 공문을 열람·내려받거나 알림을 읽었을 때. 처음 한 번만 기록하고 True."""
+    """SPC 담당자가 자기 기숙사 안내문을 열람·내려받거나 알림을 읽었을 때. 처음 한 번만 기록하고 True."""
     if user.role != UserRole.SPC_MANAGER or doc.received_at is not None or doc.is_deleted:
         return False
     dorm = db.get(Dormitory, doc.dormitory_id)
@@ -40,7 +40,7 @@ def _latest_docs(db: Session, dorm_ids: set, since: date | None = None) -> dict[
         q = q.where(GeneratedDocument.payment_deadline >= since)
     out: dict[tuple, GeneratedDocument] = {}
     for d in db.execute(q.order_by(GeneratedDocument.created_at)).scalars():
-        out[(d.dormitory_id, d.due_date)] = d          # 나중 발급본이 덮어쓴다
+        out[(d.dormitory_id, d.due_date)] = d          # 나중 발송본이 덮어쓴다
     return out
 
 
@@ -49,12 +49,12 @@ DUE_SOON_DAYS = 3   # 납부기한 영업일 D-3 이내인데 입금이 없으�
 
 def payment_states(db: Session, docs: dict, as_of: date | None = None) -> dict:
     """
-    발송완료 공문별 입금(상환) 상태 — {(기숙사, 상환예정일): {...}}.
+    발송완료 안내문별 입금(상환) 상태 — {(기숙사, 상환예정일): {...}}.
     1) 입금 확인·승인에서 완료된 입금 → PAID(입금일·시각, 자동 승인/승인/수동 처리)
-    2) 입금 기록은 없지만 상환 실적 관리에 공문 금액만큼 납부 기록이 있음 → PAID(실적 입력)
+    2) 입금 기록은 없지만 상환 실적 관리에 안내문 금액만큼 납부 기록이 있음 → PAID(실적 입력)
     3) 연결된 대기 입금 → CHECKING(확인 중)
     4) 일부만 납부 → PARTIAL / 그 밖에 납부기한 전 → UNPAID, 지남 → OVERDUE
-    재발급한 공문이어도 같은 기숙사·상환예정일의 입금이면 이어서 본다.
+    재발송한 안내문이어도 같은 기숙사·상환예정일의 입금이면 이어서 본다.
     """
     from app.models.payment import ActualPayment, BankDeposit, DepositStatus, PaymentStatus
     out: dict = {}
@@ -121,7 +121,7 @@ def _item(doc: GeneratedDocument, dorm: Dormitory, names: dict) -> dict:
 
 
 def build_notice_status(db: Session, user: User, as_of: date, dorms: dict, upcoming: list[dict]) -> dict:
-    """dorms: 권한·검색조건이 적용된 기숙사 {id: Dormitory}. upcoming: 상환예정 알림 항목(여기에 발급·수신 여부를 붙인다)."""
+    """dorms: 권한·검색조건이 적용된 기숙사 {id: Dormitory}. upcoming: 상환예정 알림 항목(여기에 발송·수신 여부를 붙인다)."""
     ids = set(dorms)
     docs = _latest_docs(db, ids, since=as_of - timedelta(days=RECEIVED_LOOKBACK_DAYS))
     uids = {d.received_by for d in docs.values() if d.received_by}
@@ -157,7 +157,7 @@ def ensure_uuid(v) -> uuid.UUID | None:
         return None
 
 
-# ---------- Phase 21: 원리금 상환 › 안내공문 — 발송대상 현황 / 발송완료 ----------
+# ---------- Phase 21: 원리금 상환 › 안내문 — 발송대상 현황 / 발송완료 ----------
 TARGET_DAYS = 15   # 기본 발송대상: 납부기한이 영업일 D-15 이내(대시보드 '발송예정'과 같은 기준)
 
 
@@ -212,7 +212,7 @@ def notice_targets(db: Session, user: User, as_of: date, *, date_from: date | No
 
 def notices_issued(db: Session, user: User, *, date_from: date | None = None, date_to: date | None = None,
                    received: bool | None = None, dormitory_id: uuid.UUID | None = None, paid: str | None = None) -> dict:
-    """발송완료: 기숙사·상환예정일별 가장 최근 발급본(상환예정일 기준 기간), 수신 확인 여부 포함."""
+    """발송완료: 기숙사·상환예정일별 가장 최근 발송본(상환예정일 기준 기간), 수신 확인 여부 포함."""
     q = select(Dormitory).where(Dormitory.is_deleted.is_(False))
     if user.role == UserRole.SPC_MANAGER:
         q = q.where(Dormitory.spc_id == user.spc_id)

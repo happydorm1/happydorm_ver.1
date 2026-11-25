@@ -17,7 +17,7 @@ function addDays(iso: string, n: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** 원리금 상환 → 안내공문 → 발송대상 현황 — 기숙사·상환예정일 단위. 누르면 공문 작성·발급 화면으로. */
+/** 원리금 상환 → 안내문 → 발송대상 현황 — 기숙사·상환예정일 단위. 누르면 안내문 작성·발송 화면으로. */
 export function NoticeTargetsPage({ me, asOf }: { me: Me | null; asOf: string }) {
   const [draft, setDraft] = useState({ mode: "default", from: asOf, to: addDays(asOf, 90), withIssued: false });
   const [q, setQ] = useState(draft);
@@ -30,7 +30,7 @@ export function NoticeTargetsPage({ me, asOf }: { me: Me | null; asOf: string })
 
   return (
     <div className="space-y-4">
-      <PageHeader title="발송대상 현황" sub="공문을 보내야 할 기숙사·상환예정일 목록입니다. 행을 누르면 공문 작성·발급 화면으로 이동하고, 발급하면 '발송완료'로 넘어갑니다." />
+      <PageHeader title="발송대상 현황" sub="안내문을 보내야 할 기숙사·상환예정일 목록입니다. 행을 누르면 안내문 작성·발송 화면으로 이동하고, 발송하면 '발송완료'로 넘어갑니다." />
       <form role="search" aria-label="발송대상 검색조건" className="bg-surface border border-line rounded-xl px-4 py-3 flex flex-wrap gap-3 items-end"
         onSubmit={(e) => { e.preventDefault(); setQ(draft); }}>
         <fieldset className="flex flex-wrap gap-3 text-sm">
@@ -46,7 +46,7 @@ export function NoticeTargetsPage({ me, asOf }: { me: Me | null; asOf: string })
           <input type="date" className={inputCls} aria-label="기간 종료" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
         </div>}
         <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={draft.withIssued}
-          onChange={(e) => setDraft({ ...draft, withIssued: e.target.checked })} />발급한 건도 보기</label>
+          onChange={(e) => setDraft({ ...draft, withIssued: e.target.checked })} />발송한 건도 보기</label>
         <Button type="submit" variant={dirty ? "primary" : "secondary"} className="ml-auto">조회</Button>
       </form>
 
@@ -54,7 +54,7 @@ export function NoticeTargetsPage({ me, asOf }: { me: Me | null; asOf: string })
       {!data ? <Loading /> : (
         <Card title={`발송대상 ${data.count}건${data.default_window ? ` (기준일 ${data.as_of}, 납부기한 영업일 D-${data.days} 이내)` : ` (상환예정일 ${q.from} ~ ${q.to})`}`}>
           <div className={`overflow-x-auto ${loading ? "opacity-60" : ""}`}>
-            {data.items.length === 0 ? <p className="text-sm text-ink-3 py-3">공문을 보낼 대상이 없습니다{data.default_window ? " — 기간을 지정하면 미리 발급할 수 있습니다" : ""}.</p> : (
+            {data.items.length === 0 ? <p className="text-sm text-ink-3 py-3">안내문을 보낼 대상이 없습니다{data.default_window ? " — 기간을 지정하면 미리 발송할 수 있습니다" : ""}.</p> : (
               <table className="w-full text-sm" aria-label="발송대상 목록">
                 <thead><tr>{["납부기한", "기숙사형태", "기숙사", "상환예정일", "차입금(재원)", "원금", "이자", "합계", "상태", ""].map((h, i) =>
                   <th key={h + i} scope="col" className={`${th} ${i >= 5 && i <= 7 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
@@ -73,23 +73,23 @@ export function NoticeTargetsPage({ me, asOf }: { me: Me | null; asOf: string })
                       <td className="px-3 py-2 text-right tabular" title={won(x.interest)}>{compactWon(x.interest)}원</td>
                       <td className="px-3 py-2 text-right tabular font-semibold">{won(x.total)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{x.issued
-                        ? <Badge tone={x.received ? "good" : "warning"}>발급완료{x.received ? "·수신" : "·미수신"}</Badge>
-                        : <Badge>미발급</Badge>}</td>
+                        ? <Badge tone={x.received ? "good" : "warning"}>발송완료{x.received ? "·수신" : "·미수신"}</Badge>
+                        : <Badge>미발송</Badge>}</td>
                       <td className="px-3 py-2 text-right"><Button size="sm" variant={x.issued ? "secondary" : "primary"}
-                        onClick={(e) => { e.stopPropagation(); open(); }}>{x.issued ? "다시 보기" : writer ? "공문 작성" : "보기"}</Button></td>
+                        onClick={(e) => { e.stopPropagation(); open(); }}>{x.issued ? "다시 보기" : writer ? "안내문 작성" : "보기"}</Button></td>
                     </tr>);
                 })}</tbody>
               </table>
             )}
           </div>
-          <p className="mt-2 text-xs text-ink-3">같은 기숙사·같은 상환예정일의 차입금은 한 공문으로 묶입니다. 금액은 원리금 테이블 예정액입니다.</p>
+          <p className="mt-2 text-xs text-ink-3">같은 기숙사·같은 상환예정일의 차입금은 한 안내문으로 묶입니다. 금액은 원리금 테이블 예정액입니다.</p>
         </Card>
       )}
     </div>
   );
 }
 
-/** 원리금 상환 → 안내공문 → 발송완료 — 발급한 공문과 기숙사 측 수신 확인 여부 */
+/** 원리금 상환 → 안내문 → 발송완료 — 발송한 안내문과 기숙사 측 수신 확인 여부 */
 const PAY_VIA: Record<string, string> = { AUTO: "자동 승인", APPROVED: "승인", MANUAL: "수동 처리", PAYMENT: "실적 입력" };
 
 function payBadge(x: NoticeStatusItem) {
@@ -103,7 +103,7 @@ function payBadge(x: NoticeStatusItem) {
   }
 }
 
-// 진행 단계(Phase 23) — 한 공문은 한 단계에만 속한다(위에서부터 우선)
+// 진행 단계(Phase 23) — 한 안내문은 한 단계에만 속한다(위에서부터 우선)
 type Stage = "done" | "checking" | "overdue" | "soon" | "unreceived" | "waiting";
 function stageOf(x: NoticeStatusItem): Stage {
   if (x.pay_status === "PAID") return "done";
@@ -114,8 +114,8 @@ function stageOf(x: NoticeStatusItem): Stage {
   return "waiting";
 }
 const STAGES: { key: Stage | "all"; label: string; hint: string; tone: string }[] = [
-  { key: "all", label: "발급 전체", hint: "조회한 기간의 발송완료 공문", tone: "border-line" },
-  { key: "unreceived", label: "미수신", hint: "기숙사가 아직 공문을 열지 않음(입금 전)", tone: "border-warning" },
+  { key: "all", label: "발송 전체", hint: "조회한 기간의 발송완료 안내문", tone: "border-line" },
+  { key: "unreceived", label: "미수신", hint: "기숙사가 아직 안내문을 열지 않음(입금 전)", tone: "border-warning" },
   { key: "waiting", label: "입금 대기", hint: "수신 확인, 납부기한 전", tone: "border-line" },
   { key: "soon", label: "기한 임박 미입금", hint: "납부기한 영업일 D-3 이내", tone: "border-critical" },
   { key: "overdue", label: "기한 경과 미입금", hint: "납부기한이 지났는데 입금 없음(일부 포함)", tone: "border-critical" },
@@ -123,9 +123,9 @@ const STAGES: { key: Stage | "all"; label: string; hint: string; tone: string }[
   { key: "done", label: "완료", hint: "입금 완료(자동·승인·수동·실적 입력)", tone: "border-good" },
 ];
 
-/** 발급 → 수신 → 입금 확인 → 완료 단계 표시 */
+/** 발송 → 수신 → 입금 확인 → 완료 단계 표시 */
 function Stepper({ x }: { x: NoticeStatusItem }) {
-  const steps: [string, boolean][] = [["발급", true], ["수신", x.received], ["입금 확인", x.pay_status === "CHECKING" || x.pay_status === "PAID"],
+  const steps: [string, boolean][] = [["발송", true], ["수신", x.received], ["입금 확인", x.pay_status === "CHECKING" || x.pay_status === "PAID"],
     ["완료", x.pay_status === "PAID"]];
   return (
     <ol className="relative mt-1 flex flex-wrap items-center gap-1 text-[11px]" aria-label="진행 단계">
@@ -139,7 +139,7 @@ function Stepper({ x }: { x: NoticeStatusItem }) {
   );
 }
 
-/** 독촉 메일 — 공문 원문·수신처를 읽어 메일 작성 창을 연다 */
+/** 독촉 메일 — 안내문 원문·수신처를 읽어 메일 작성 창을 연다 */
 function ReminderMail({ noticeId, dormId, overdue, onClose }: { noticeId: string; dormId: string; overdue: boolean; onClose: () => void }) {
   const { data, error } = useAsync<[NoticeT, Contact[]]>(() => Promise.all([api.notice(noticeId), api.contacts(dormId)]), [noticeId, dormId]);
   if (error) return <Modal title="독촉 메일" onClose={onClose} footer={<Button onClick={onClose}>닫기</Button>}><Notice tone="error">{error}</Notice></Modal>;
@@ -148,7 +148,7 @@ function ReminderMail({ noticeId, dormId, overdue, onClose }: { noticeId: string
   if (!contacts.some((c) => c.email)) return (
     <Modal title="독촉 메일" onClose={onClose} footer={<><Button onClick={onClose}>닫기</Button>
       <Button variant="primary" onClick={() => go("notices", { dormitory: dormId })}>연락처 등록하러 가기</Button></>}>
-      <p className="text-sm">이 기숙사에 이메일이 있는 수신처가 없습니다. 공문 작성·발급 화면의 '수신처·연락처'에서 먼저 등록하세요.</p>
+      <p className="text-sm">이 기숙사에 이메일이 있는 수신처가 없습니다. 안내문 작성·발송 화면의 '수신처·연락처'에서 먼저 등록하세요.</p>
     </Modal>);
   return <MailDialog n={n} contacts={contacts} onClose={onClose} reminder={overdue ? "overdue" : "soon"} />;
 }
@@ -167,7 +167,7 @@ export function NoticeIssuedPage({ me, asOf, remindId }: { me: Me | null; asOf: 
   const [stage, setStage] = useState<Stage | "all">("all");
   const [remind, setRemind] = useState<NoticeStatusItem | null>(null);
   const [remindFromLink, setRemindFromLink] = useState(remindId);
-  // 대시보드 '독촉 메일'에서 들어오면 해당 공문의 메일 창을 바로 연다
+  // 대시보드 '독촉 메일'에서 들어오면 해당 안내문의 메일 창을 바로 연다
   if (remindFromLink && data) {
     const hit = data.items.find((x) => x.notice_id === remindFromLink);
     setRemindFromLink(undefined);
@@ -176,10 +176,29 @@ export function NoticeIssuedPage({ me, asOf, remindId }: { me: Me | null; asOf: 
   const counts = new Map<string, number>();
   for (const x of data?.items ?? []) counts.set(stageOf(x), (counts.get(stageOf(x)) ?? 0) + 1);
   const shown = (data?.items ?? []).filter((x) => stage === "all" || stageOf(x) === stage);
+  const [bulk, setBulk] = useState<"xlsx" | "pdf" | null>(null);
+  const stageLabel = stage === "all" ? "" : STAGES.find((s) => s.key === stage)?.label ?? "";
+  // 조회 결과(진행 단계 카드로 거른 경우 그 목록) 전체를 한 파일로 — Excel은 '목록' 시트 + 안내문별 시트, PDF는 안내문별 페이지
+  async function downloadAll(fmt: "xlsx" | "pdf") {
+    setBulk(fmt); setErr(null);
+    const dorm = q.dorm ? ref?.dormitories.find((d) => d.id === q.dorm)?.dormitory_name : "";
+    const label = [`상환예정일 ${q.from || "처음"} ~ ${q.to || "끝"}`, dorm && `기숙사 ${dorm}`,
+      q.received && (q.received === "true" ? "수신 확인" : "미수신"), q.paid && `입금 ${q.paid === "PAID" ? "완료" : q.paid === "CHECKING" ? "확인 중" : "미입금"}`,
+      stageLabel && `단계 ${stageLabel}`, `${shown.length}건`].filter(Boolean).join(" · ");
+    try {
+      await downloadFile("/notices/bulk-download", {}, `발송완료_안내문_${shown.length}건.${fmt}`,
+        { ids: shown.map((x) => x.notice_id), format: fmt, label });
+      reload();
+    } catch (e) { setErr(e instanceof Error ? e.message : "내려받지 못했습니다."); }
+    finally { setBulk(null); }
+  }
+  const bulkOff = !data || shown.length === 0 || dirty || bulk !== null;
+  const bulkTitle = dirty ? "바뀐 조건으로 먼저 [조회]하세요" : !shown.length ? "내려받을 안내문이 없습니다"
+    : `조회 결과${stageLabel ? `(${stageLabel})` : ""} ${shown.length}건을 한 파일로 내려받습니다`;
 
   return (
     <div className="space-y-4">
-      <PageHeader title="발송완료" sub="발급한 공문 목록입니다. 기숙사 측(SPC 담당자)이 공문을 열람·내려받거나 공문 알림을 읽으면 '수신 확인'으로 바뀝니다." />
+      <PageHeader title="발송완료" sub="발송한 안내문 목록입니다. 기숙사 측(SPC 담당자)이 안내문을 열람·내려받거나 안내문 알림을 읽으면 '수신 확인'으로 바뀝니다." />
       <form role="search" aria-label="발송완료 검색조건" className="bg-surface border border-line rounded-xl px-4 py-3 flex flex-wrap gap-3 items-end"
         onSubmit={(e) => { e.preventDefault(); setQ(draft); }}>
         <Field label="상환예정일 기간">
@@ -206,7 +225,16 @@ export function NoticeIssuedPage({ me, asOf, remindId }: { me: Me | null; asOf: 
             {ref?.dormitories.map((d) => <option key={d.id} value={d.id}>{d.dormitory_name} ({d.school_name})</option>)}
           </select>
         </Field>
-        <Button type="submit" variant={dirty ? "primary" : "secondary"} className="ml-auto mb-0.5">조회</Button>
+        <div className="ml-auto mb-0.5 flex flex-wrap items-center gap-2">
+          {canDownload && (
+            <div role="group" aria-label="조회 결과 전체 내려받기" className="flex items-center gap-2 pr-2 mr-0.5 border-r border-line">
+              <span className="text-xs text-ink-2 whitespace-nowrap">조회 결과 전체{data ? <b className="tabular"> {shown.length}건</b> : ""}</span>
+              <Button type="button" disabled={bulkOff} title={bulkTitle} onClick={() => downloadAll("xlsx")}>{bulk === "xlsx" ? "만드는 중…" : "Excel"}</Button>
+              <Button type="button" disabled={bulkOff} title={bulkTitle} onClick={() => downloadAll("pdf")}>{bulk === "pdf" ? "만드는 중…" : "PDF"}</Button>
+            </div>
+          )}
+          <Button type="submit" variant={dirty ? "primary" : "secondary"}>조회</Button>
+        </div>
       </form>
 
       {(error || err) && <Notice tone="error" onClose={() => setErr(null)}>{error ?? err}</Notice>}
@@ -228,9 +256,9 @@ export function NoticeIssuedPage({ me, asOf, remindId }: { me: Me | null; asOf: 
         <Card title={stage === "all" ? `발송완료 ${data.count}건` : `${STAGES.find((s) => s.key === stage)?.label} ${shown.length}건`} actions={<span className="text-xs text-ink-2">미수신 <b className={data.unreceived ? "text-warning-ink" : ""}>{data.unreceived}건</b>
           {data.unpaid != null && <> · 미입금 <b className={data.unpaid ? "text-critical-ink" : ""}>{data.unpaid}건</b></>}</span>}>
           <div className={`overflow-x-auto ${loading ? "opacity-60" : ""}`}>
-            {shown.length === 0 ? <p className="text-sm text-ink-3 py-3">조건에 맞는 발급 공문이 없습니다.</p> : (
+            {shown.length === 0 ? <p className="text-sm text-ink-3 py-3">조건에 맞는 발송 안내문이 없습니다.</p> : (
               <table className="w-full text-sm" aria-label="발송완료 목록">
-                <thead><tr>{["상환예정일", "납부기한", "기숙사", "공문", "납부금액", "발급일시", "수신확인", "입금확인", "입금일시", ""].map((h, i) =>
+                <thead><tr>{["상환예정일", "납부기한", "기숙사", "안내문", "납부금액", "발송일시", "수신확인", "입금확인", "입금일시", ""].map((h, i) =>
                   <th key={h + i} scope="col" className={`${th} ${i === 4 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
                 <tbody>{shown.map((x) => (
                   <tr key={x.notice_id} className="border-t border-line align-top">
@@ -261,8 +289,8 @@ export function NoticeIssuedPage({ me, asOf, remindId }: { me: Me | null; asOf: 
               </table>
             )}
           </div>
-          <p className="mt-2 text-xs text-ink-3">같은 상환예정일 공문을 다시 발급하면 최근 발급본만 보이며, 수신 여부도 새 발급본 기준으로 다시 확인합니다.
-            재단 직원이 내려받는 것은 수신으로 보지 않습니다. '이력·메일'에서 PDF·메일 작성·삭제를 할 수 있습니다.
+          <p className="mt-2 text-xs text-ink-3">같은 상환예정일 안내문을 다시 발송하면 최근 발송본만 보이며, 수신 여부도 새 발송본 기준으로 다시 확인합니다.
+            재단 직원이 내려받는 것은 수신으로 보지 않습니다. 위 '조회 결과 전체 Excel·PDF'는 지금 표에 보이는 안내문을 한 파일로 받습니다(Excel: 목록 시트 + 안내문별 시트, PDF: 안내문별 한 페이지). '이력·메일'에서 PDF·메일 작성·삭제를 할 수 있습니다.
             입금확인은 '입금 확인·승인'에서 완료된 입금(또는 상환 실적 관리의 납부 기록)을 기준으로 합니다 — '확인 중'은 연결된 입금이 승인 대기 중인 건입니다.</p>
         </Card>
       )}
@@ -271,12 +299,12 @@ export function NoticeIssuedPage({ me, asOf, remindId }: { me: Me | null; asOf: 
   );
 }
 
-/** SPC 담당자 전용 '접수공문'(2026-11-22) — 우리 기숙사로 발급된 안내공문을 보고, 공문별 진행(발급→접수→입금 확인→완료)을 확인한다.
- *  공문을 열거나 내려받으면 재단 쪽에 '수신 확인'으로 기록된다. 재단용 작성·발급·메일 기능은 보이지 않는다. */
+/** SPC 담당자 전용 '접수 안내문'(2026-11-22) — 우리 기숙사로 발송된 안내문을 보고, 안내문별 진행(발송→접수→입금 확인→완료)을 확인한다.
+ *  안내문을 열거나 내려받으면 재단 쪽에 '수신 확인'으로 기록된다. 재단용 작성·발송·메일 기능은 보이지 않는다. */
 const SPC_STAGES: { key: Stage | "all"; label: string; hint: string; tone: string }[] = [
-  { key: "all", label: "전체", hint: "조회 기간에 받은 공문", tone: "border-line" },
-  { key: "unreceived", label: "새 공문", hint: "아직 열어 보지 않은 공문", tone: "border-warning" },
-  { key: "waiting", label: "입금 대기", hint: "공문 확인, 납부기한 전", tone: "border-line" },
+  { key: "all", label: "전체", hint: "조회 기간에 받은 안내문", tone: "border-line" },
+  { key: "unreceived", label: "새 안내문", hint: "아직 열어 보지 않은 안내문", tone: "border-warning" },
+  { key: "waiting", label: "입금 대기", hint: "안내문 확인, 납부기한 전", tone: "border-line" },
   { key: "soon", label: "기한 임박", hint: "납부기한 영업일 D-3 이내, 입금 전", tone: "border-critical" },
   { key: "overdue", label: "기한 경과", hint: "납부기한이 지났는데 입금이 확인되지 않음(일부 포함)", tone: "border-critical" },
   { key: "checking", label: "입금 확인 중", hint: "재단이 입금을 확인하고 있음", tone: "border-brand" },
@@ -314,10 +342,10 @@ export function NoticeReceivedPage({ me, openId }: { me: Me | null; openId?: str
   async function open(id: string) {
     setOpening(id); setErr(null);
     try { setView(await api.notice(id)); reload(); }      // 여는 순간 재단에 '수신 확인'으로 기록
-    catch (e) { setErr(e instanceof Error ? e.message : "공문을 열지 못했습니다."); }
+    catch (e) { setErr(e instanceof Error ? e.message : "안내문을 열지 못했습니다."); }
     finally { setOpening(null); }
   }
-  // 알림의 '공문' 링크로 들어오면 해당 공문을 바로 연다
+  // 알림의 '안내문' 링크로 들어오면 해당 안내문을 바로 연다
   useEffect(() => {
     if (pendingOpen && data) { setPendingOpen(undefined); void open(pendingOpen); }
   }, [pendingOpen, data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -326,8 +354,8 @@ export function NoticeReceivedPage({ me, openId }: { me: Me | null; openId?: str
 
   return (
     <div className="space-y-4">
-      <PageHeader title="접수공문" sub="우리 기숙사로 발급된 원리금 상환 안내공문입니다. 공문을 열어 보거나 내려받으면 재단에 '수신 확인'으로 알려집니다. 입금 여부는 재단이 은행 입금을 확인한 뒤 바뀝니다." />
-      <form role="search" aria-label="접수공문 검색조건" className="bg-surface border border-line rounded-xl px-4 py-3 flex flex-wrap gap-3 items-end"
+      <PageHeader title="접수 안내문" sub="우리 기숙사로 발송된 원리금 상환 안내문입니다. 안내문을 열어 보거나 내려받으면 재단에 '수신 확인'으로 알려집니다. 입금 여부는 재단이 은행 입금을 확인한 뒤 바뀝니다." />
+      <form role="search" aria-label="접수 안내문 검색조건" className="bg-surface border border-line rounded-xl px-4 py-3 flex flex-wrap gap-3 items-end"
         onSubmit={(e) => { e.preventDefault(); setQ(draft); }}>
         <Field label="상환예정일 기간">
           <div className="flex items-center gap-1">
@@ -358,12 +386,12 @@ export function NoticeReceivedPage({ me, openId }: { me: Me | null; openId?: str
         </section>
       )}
       {!data ? <Loading /> : (
-        <Card title={stage === "all" ? `접수공문 ${data.count}건` : `${SPC_STAGES.find((s) => s.key === stage)?.label} ${shown.length}건`}
-          actions={<span className="text-xs text-ink-2">새 공문 <b className={data.unreceived ? "text-warning-ink" : ""}>{data.unreceived}건</b></span>}>
+        <Card title={stage === "all" ? `접수 안내문 ${data.count}건` : `${SPC_STAGES.find((s) => s.key === stage)?.label} ${shown.length}건`}
+          actions={<span className="text-xs text-ink-2">새 안내문 <b className={data.unreceived ? "text-warning-ink" : ""}>{data.unreceived}건</b></span>}>
           <div className={`overflow-x-auto ${loading ? "opacity-60" : ""}`}>
-            {shown.length === 0 ? <p className="text-sm text-ink-3 py-3">조건에 맞는 공문이 없습니다.</p> : (
-              <table className="w-full text-sm" aria-label="접수공문 목록">
-                <thead><tr>{["상환예정일", "납부기한", "기숙사", "공문 · 진행", "납부금액", "발급일시", "접수", "입금", ""].map((h, i) =>
+            {shown.length === 0 ? <p className="text-sm text-ink-3 py-3">조건에 맞는 안내문이 없습니다.</p> : (
+              <table className="w-full text-sm" aria-label="접수 안내문 목록">
+                <thead><tr>{["상환예정일", "납부기한", "기숙사", "안내문 · 진행", "납부금액", "발송일시", "접수", "입금", ""].map((h, i) =>
                   <th key={h + i} scope="col" className={`${th} ${i === 4 ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
                 <tbody>{shown.map((x) => (
                   <tr key={x.notice_id} className="border-t border-line align-top">
@@ -378,12 +406,12 @@ export function NoticeReceivedPage({ me, openId }: { me: Me | null; openId?: str
                     <td className="px-3 py-2 text-xs text-ink-2 whitespace-nowrap">{fmtDateTime(x.issued_at)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{x.received
                       ? <><Badge tone="good">접수 완료</Badge><div className="text-[11px] text-ink-3 mt-0.5">{fmtDateTime(x.received_at)}</div></>
-                      : <Badge tone="warning">새 공문</Badge>}</td>
+                      : <Badge tone="warning">새 안내문</Badge>}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{spcPayBadge(x)}
                       {x.paid_date && <div className="text-[11px] text-ink-3 mt-0.5 tabular">입금 {x.paid_date}{x.paid_time ? ` ${x.paid_time.slice(0, 5)}` : ""}</div>}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <span className="inline-flex gap-1">
-                        <Button size="sm" variant="primary" disabled={opening === x.notice_id} onClick={() => open(x.notice_id)}>{opening === x.notice_id ? "여는 중…" : "공문 보기"}</Button>
+                        <Button size="sm" variant="primary" disabled={opening === x.notice_id} onClick={() => open(x.notice_id)}>{opening === x.notice_id ? "여는 중…" : "안내문 보기"}</Button>
                         {canDownload && <Button size="sm" onClick={() => dl(x, "pdf")}>PDF</Button>}
                         {canDownload && <Button size="sm" onClick={() => dl(x, "xlsx")}>Excel</Button>}
                       </span>
@@ -392,17 +420,17 @@ export function NoticeReceivedPage({ me, openId }: { me: Me | null; openId?: str
               </table>
             )}
           </div>
-          <p className="mt-2 text-xs text-ink-3">같은 상환예정일 공문이 다시 발급되면 최근 발급본만 보이며, 새 발급본은 다시 '새 공문'으로 표시됩니다.
-            입금은 공문의 납부금액 전액을 납부기한까지 안내된 계좌로 보내 주세요. 재단이 은행 입금을 확인하면 '입금 확인 완료'로 바뀝니다.</p>
+          <p className="mt-2 text-xs text-ink-3">같은 상환예정일 안내문이 다시 발송되면 최근 발송본만 보이며, 새 발송본은 다시 '새 안내문'으로 표시됩니다.
+            입금은 안내문의 납부금액 전액을 납부기한까지 안내된 계좌로 보내 주세요. 재단이 은행 입금을 확인하면 '입금 확인 완료'로 바뀝니다.</p>
         </Card>
       )}
       {view && <Modal wide title={view.title} onClose={() => setView(null)} footer={<>
         {canDownload && <Button onClick={() => dl({ notice_id: view.id, title: view.title }, "pdf")}>PDF 내려받기</Button>}
         {canDownload && <Button onClick={() => dl({ notice_id: view.id, title: view.title }, "xlsx")}>Excel 내려받기</Button>}
         <Button variant="primary" onClick={() => setView(null)}>닫기</Button></>}>
-        <p className="mb-2 text-xs text-ink-2">상환예정일 {view.due_date} · 납부기한 {view.payment_deadline} · 발급 {fmtDateTime(view.created_at)}
+        <p className="mb-2 text-xs text-ink-2">상환예정일 {view.due_date} · 납부기한 {view.payment_deadline} · 발송 {fmtDateTime(view.created_at)}
           {view.received_at && <> · 접수 {fmtDateTime(view.received_at)}</>}</p>
-        <NoticePreview d={view.generated_data} title="공문 내용" />
+        <NoticePreview d={view.generated_data} title="안내문 내용" />
       </Modal>}
     </div>
   );

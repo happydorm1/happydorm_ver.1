@@ -1,13 +1,13 @@
 """
 Phase 18c: 관리자 삭제(숨김)·복구.
 
-물리삭제는 하지 않는다(금융 업무 감사 추적). 삭제하면 is_deleted=True로 모든 화면·대시보드·보고서·알림·공문에서 빠지고,
+물리삭제는 하지 않는다(금융 업무 감사 추적). 삭제하면 is_deleted=True로 모든 화면·대시보드·보고서·알림·안내문에서 빠지고,
 DeletionRecord에 무엇을 함께 숨겼는지 남겨 그대로 복구한다. 변경이력(audit_log)에도 DELETE/RESTORE로 남는다.
 
-- 기숙사: 기숙사 + 소속 차입금 전부(그 차입금의 원리금 테이블·납부·공문은 차입금·기숙사를 통해 함께 안 보임)
+- 기숙사: 기숙사 + 소속 차입금 전부(그 차입금의 원리금 테이블·납부·안내문은 차입금·기숙사를 통해 함께 안 보임)
 - 차입금: 차입금 1건. 차입금 코드는 DB에서 고유값이라, 같은 코드를 다시 등록할 수 있도록 삭제 중에는 코드 뒤에 표식을 붙이고 복구 때 되돌린다
 - 원리금 테이블: 그 차입금의 모든 버전 → 조건 수정 후 다시 생성 가능(새 버전 번호는 이어서 매김)
-- 안내공문: 발급본 1건(+그 공문의 SPC 담당자 알림)
+- 안내문: 발송본 1건(+그 안내문의 SPC 담당자 알림)
 - 이벤트(건별): 차입금마다 '가장 최근에 적용된 이벤트'부터(취소와 같은 원칙 — 중간 이벤트를 빼면 뒤 이벤트 결과가 근거를 잃음).
   그 이벤트가 만든 원리금 테이블 버전(과 그 뒤 버전)을 숨기고 직전 버전을 현재로 되돌리며, 금리변동·전액대환이 바꾼
   금리이력·재원도 되돌린다. 이미 취소된 이벤트는 그 이벤트 버전(과 맨 끝이면 취소 복원 버전)만 숨긴다.
@@ -28,7 +28,7 @@ from app.models.notification import Notification
 from app.models.organization import DeletionRecord, Dormitory, User
 from app.models.schedule import RepaymentScheduleVersion
 
-LABEL = {"DORMITORY": "기숙사", "LOAN": "차입금", "SCHEDULE": "원리금 테이블", "NOTICE": "안내공문", "EVENT": "이벤트"}
+LABEL = {"DORMITORY": "기숙사", "LOAN": "차입금", "SCHEDULE": "원리금 테이블", "NOTICE": "안내문", "EVENT": "이벤트"}
 EVENT_LABEL = {"DEFERRAL": "상환유예", "ACCELERATION": "원금가속상환", "EARLY_REPAYMENT": "조기상환", "REFINANCING": "대환대출",
                "RATE_CHANGE": "금리변동", "DELINQUENCY": "연체처리"}
 
@@ -162,7 +162,7 @@ def delete_notice(db: Session, notice_id: uuid.UUID, reason: str, user: User) ->
     reason = _reason(reason)
     doc = db.get(GeneratedDocument, notice_id)
     if doc is None or doc.is_deleted:
-        raise DeletionError("공문을 찾을 수 없습니다.", 404)
+        raise DeletionError("안내문을 찾을 수 없습니다.", 404)
     notes = [n for n in db.execute(select(Notification).where(Notification.notification_type == "NOTICE_ISSUED",
                                                                Notification.is_deleted.is_(False))).scalars()
              if (n.payload or {}).get("notice_id") == str(doc.id)]
@@ -394,7 +394,7 @@ def restore(db: Session, record_id: uuid.UUID, user: User) -> DeletionRecord:
         doc = db.get(GeneratedDocument, rec.target_id)
         dorm = db.get(Dormitory, doc.dormitory_id) if doc else None
         if dorm is None or dorm.is_deleted:
-            raise DeletionError("이 공문의 기숙사가 삭제되어 있습니다. 기숙사를 먼저 복구하세요.")
+            raise DeletionError("이 안내문의 기숙사가 삭제되어 있습니다. 기숙사를 먼저 복구하세요.")
         doc.is_deleted = False
         for nid in d.get("notifications", []):
             n = db.get(Notification, uuid.UUID(nid))

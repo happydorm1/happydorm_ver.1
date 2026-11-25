@@ -1,8 +1,8 @@
 """
-안내공문 PDF — LibreOffice 없이 Python(fpdf2)만으로 그리는 내장 방식(2026-11-23).
+안내문 PDF — LibreOffice 없이 Python(fpdf2)만으로 그리는 내장 방식(2026-11-23).
 LibreOffice가 없거나(Windows 노트북·새 Codespace) 메모리·CPU가 작은 서버(Render 무료)에서 변환이 실패할 때 쓴다.
-Excel 공문(notice_export.build_notice_workbook)과 같은 6개 항목·열 비율·음영(머리 회색, IPMT 연두, 합계 초록)을 그대로 따른다.
-값은 발급 당시 스냅샷(generated_data)에서 읽으므로 몇 번을 내려받아도 같다.
+Excel 안내문(notice_export.build_notice_workbook)과 같은 6개 항목·열 비율·음영(머리 회색, IPMT 연두, 합계 초록)을 그대로 따른다.
+값은 발송 당시 스냅샷(generated_data)에서 읽으므로 몇 번을 내려받아도 같다.
 """
 from datetime import date
 from pathlib import Path
@@ -50,6 +50,9 @@ class _Doc(FPDF):
         self.set_auto_page_break(True, 15)
         self.add_font("K", "", reg)
         self.add_font("K", "B", bold)
+        self.set_label_width(label_w)
+
+    def set_label_width(self, label_w: float):
         ratio = (label_w,) + _RATIO[1:]
         self.cols = [w * (210 - 30) / sum(ratio) for w in ratio]
 
@@ -84,10 +87,22 @@ class _Doc(FPDF):
 
 
 def build_notice_pdf(data: dict, font_path: str = "") -> bytes:
-    from app.engine.notice_export import label_col_width, split_label
+    return build_notices_pdf([data], font_path)
+
+
+def build_notices_pdf(datas: list[dict], font_path: str = "") -> bytes:
+    """안내문 여러 건을 한 PDF로 — 건마다 새 페이지에서 시작한다(일괄 내려받기)."""
     reg, bold = _fonts(font_path)
-    pdf = _Doc(reg, bold, label_col_width(data))
-    pdf.set_title(data.get("title", "안내공문"))
+    pdf = _Doc(reg, bold)
+    pdf.set_title(datas[0].get("title", "안내문") if len(datas) == 1 else f"안내문 {len(datas)}건")
+    for data in datas:
+        _draw(pdf, data)
+    return bytes(pdf.output())
+
+
+def _draw(pdf: "_Doc", data: dict) -> None:
+    from app.engine.notice_export import label_col_width, split_label
+    pdf.set_label_width(label_col_width(data))
     pdf.add_page()
     n = len(data["payments"])
 
@@ -159,4 +174,3 @@ def build_notice_pdf(data: dict, font_path: str = "") -> bytes:
     pdf.section("6. 비고")
     pdf.row([(6, "\n".join(data.get("notes") or []), "L", None, False)], h=18)
     _ = n
-    return bytes(pdf.output())

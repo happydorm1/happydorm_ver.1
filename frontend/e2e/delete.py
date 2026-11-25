@@ -2,7 +2,7 @@
 관리자 삭제(숨김)·복구 E2E — 데이터를 바꾸므로(끝에 복구함) '새로 만든 데모 DB'에서 돌린다.
     python e2e/delete.py http://127.0.0.1:4173 [스크린샷 폴더]
 확인: 관리자만 버튼·메뉴가 보임, 원리금 테이블 삭제 → 재생성(번호 이어짐), 차입금 삭제 → 목록에서 빠짐 → 복구,
-기숙사 삭제 → 대시보드 기숙사 수 감소 → 복구, 안내공문 삭제 → 발급 이력에서 빠짐, 사유 없으면 삭제 버튼 비활성.
+기숙사 삭제 → 대시보드 기숙사 수 감소 → 복구, 안내문 삭제 → 발송 이력에서 빠짐, 사유 없으면 삭제 버튼 비활성.
 """
 import re
 import sys
@@ -105,19 +105,19 @@ with sync_playwright() as p:
     shot(page, "d02_deletions")
     expect(kpi_dorms(page)).to_contain_text("6곳")
 
-    # 4) 안내공문 발급 → 삭제
+    # 4) 안내문 발송 → 삭제
     page.evaluate("location.hash = \'#/notices\'")
     sel = page.get_by_label("기숙사", exact=True)
     sel.select_option(sel.locator("option", has_text="가람관").first.get_attribute("value"))
     page.locator("section", has_text="1. 기숙사·상환예정일").get_by_role("button", name=re.compile(r"^\d{4}-\d{2}-\d{2}$")).first.click()
-    page.locator("section[aria-label='2. 공문 미리보기']").get_by_role("button", name="이 내용으로 발급").click()
-    page.get_by_role("dialog", name="공문 발급 확인").get_by_role("button", name="발급", exact=True).click()
-    issued = page.locator("section", has_text="발급 이력 — 가람관")
+    page.locator("section[aria-label='2. 안내문 미리보기']").get_by_role("button", name="이 내용으로 발송").click()
+    page.get_by_role("dialog", name="안내문 발송 확인").get_by_role("button", name="발송", exact=True).click()
+    issued = page.locator("section", has_text="발송 이력 — 가람관")
     expect(issued.locator("li")).to_have_count(1)
     issued.get_by_role("button", name="삭제").first.click()
-    confirm_delete(page, "안내공문 삭제", "E2E 잘못 발급")
-    expect(page.get_by_text("공문을 삭제했습니다")).to_be_visible()
-    expect(issued.get_by_text("발급한 공문이 없습니다")).to_be_visible()
+    confirm_delete(page, "안내문 삭제", "E2E 잘못 발송")
+    expect(page.get_by_text("안내문을 삭제했습니다")).to_be_visible()
+    expect(issued.get_by_text("발송한 안내문이 없습니다")).to_be_visible()
 
     # 4b) 원리금 테이블 버전 건별 삭제(라온하우스 V2 = 이벤트 결과) → V1이 다시 현재, 이벤트도 함께 숨김
     open_loan(page, "라온하우스")
@@ -141,7 +141,7 @@ with sync_playwright() as p:
     expect(page.locator("table tbody")).not_to_contain_text("라온하우스")
     shot(page, "d03_events")
 
-    # 5) 복구: 기숙사·차입금·공문·버전(이벤트)·이벤트 → 원래대로
+    # 5) 복구: 기숙사·차입금·안내문·버전(이벤트)·이벤트 → 원래대로
     nav(page, "삭제·복구")
     for label in ("바름학사", "미르기숙사", "가람관", "2015-05-29_공자-30", "2018-11-30_공자-60"):
         hist.locator("li", has_text=label).get_by_role("button", name="복구").click()
@@ -170,4 +170,4 @@ with sync_playwright() as p:
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "가로 넘침"
     b.close()
 
-print("E2E OK: 관리자만 삭제 버튼·메뉴, 원리금 테이블 삭제·재생성(V2)·옛 테이블 복구 차단 안내, 차입금 삭제·복구, 차입금·기숙사 삭제가 대시보드에 반영(KPI 8→7→6)·복구 후 8, 안내공문 삭제·복구, 원리금 테이블 버전 건별 삭제(V2→V1)·이벤트 건별 삭제·복구, 사유 필수, 휴대폰 폭")
+print("E2E OK: 관리자만 삭제 버튼·메뉴, 원리금 테이블 삭제·재생성(V2)·옛 테이블 복구 차단 안내, 차입금 삭제·복구, 차입금·기숙사 삭제가 대시보드에 반영(KPI 8→7→6)·복구 후 8, 안내문 삭제·복구, 원리금 테이블 버전 건별 삭제(V2→V1)·이벤트 건별 삭제·복구, 사유 필수, 휴대폰 폭")

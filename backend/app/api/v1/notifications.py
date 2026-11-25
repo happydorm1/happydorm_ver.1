@@ -64,7 +64,7 @@ def mark_read(notification_id: uuid.UUID, db: Session = Depends(get_db), current
         n.is_read, n.read_at = True, datetime.now(timezone.utc)
         db.commit()
         db.refresh(n)
-    if n.notification_type == "NOTICE_ISSUED":            # 공문 발급 알림을 읽으면 그 공문은 수신
+    if n.notification_type == "NOTICE_ISSUED":            # 안내문 발송 알림을 읽으면 그 안내문은 수신
         nid = ensure_uuid((n.payload or {}).get("notice_id"))
         doc = db.get(GeneratedDocument, nid) if nid else None
         if doc is not None:

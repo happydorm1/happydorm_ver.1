@@ -211,7 +211,7 @@ def import_bytes(blob: bytes, password: str) -> dict:
 
 # ---------- 명령 ----------
 KEY = [("loan", "차입금"), ("dormitory", "기숙사"), ("repayment_schedule_row", "상환일정 행"), ("actual_payment", "납부 기록"),
-       ("generated_document", "안내공문"), ("bank_deposit", "입금내역"), ("app_user", "사용자"), ("audit_log", "감사로그")]
+       ("generated_document", "안내문"), ("bank_deposit", "입금내역"), ("app_user", "사용자"), ("audit_log", "감사로그")]
 
 
 def _summary(counts: dict, files: int) -> str:

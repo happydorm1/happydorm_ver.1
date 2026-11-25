@@ -19,10 +19,10 @@ export const MENU: NavNode[] = [
     { label: "이벤트 등록", route: "events", who: "foundation" },
     { label: "차입금 관리", route: "loans" }] },
   { label: "원리금 상환", children: [
-    { label: "안내공문", children: [
+    { label: "안내문", children: [
       { label: "발송대상 현황", route: "notices/targets", who: "writer" },
       { label: "발송완료", route: "notices/issued", who: "staff" },
-      { label: "접수공문", route: "notices/received", who: "spc" }] },
+      { label: "접수 안내문", route: "notices/received", who: "spc" }] },
     { label: "입금 확인·승인", route: "deposits", who: "staff" },
     { label: "상환 실적 관리", route: "payments", who: "staff" }] },
   { label: "마이페이지", children: [{ label: "알림", route: "notifications" }, { label: "기준정보", route: "admin/reference", who: "writer" }] },

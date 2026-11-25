@@ -178,7 +178,7 @@ export interface AuditItem {
   after_value: string | null; changed_by: Id | null; changed_by_name: string | null; changed_at: string; change_reason: string | null;
 }
 
-// ---------- 업무 화면 2차(이벤트·납부·공문·알림·관리자) ----------
+// ---------- 업무 화면 2차(이벤트·납부·안내문·알림·관리자) ----------
 export interface EventListItem extends LoanEventItem { loan_id: Id; loan_code: string | null; dormitory_name: string | null; cancellable: boolean }
 export interface EventRequestItem {
   id: Id; loan_id: Id; loan_code: string | null; dormitory_name: string | null; event_type: string; event_label: string;
@@ -293,7 +293,7 @@ export interface MigrationBatch {
   cancelled_at: string | null; cancel_reason: string | null;
 }
 
-// ---------- Phase 20: 안내공문 발급·수신 현황 ----------
+// ---------- Phase 20: 안내문 발송·수신 현황 ----------
 export interface NoticeStatusItem {
   notice_id: Id; dormitory_id: Id; dormitory_name: string; school_name: string; title: string; due_date: string;
   payment_deadline: string; issued_at: string; total: number | null; received: boolean; received_at: string | null;
@@ -309,7 +309,7 @@ export type NoticeStatus =
   | { scope: "SPC"; received: { count: number; unconfirmed: number; items: NoticeStatusItem[] } }
   | { scope: "NONE" };
 
-// ---------- Phase 21: 기숙사 입금계좌 · 안내공문 발송대상/발송완료 ----------
+// ---------- Phase 21: 기숙사 입금계좌 · 안내문 발송대상/발송완료 ----------
 export interface DormAccount { dormitory_id: Id; bank_account: string | null; account_holder: string | null; uses_common: boolean }
 export interface NoticeTarget {
   dormitory_id: Id; dormitory_name: string; school_name: string; project_type: string | null; due_date: string;

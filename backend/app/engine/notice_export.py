@@ -1,7 +1,7 @@
 """
-안내공문 Excel/PDF 생성 — 첨부2 양식(6개 항목)을 그대로 재현한다.
-공문은 '발급 당시 스냅샷'(GeneratedDocument.generated_data)에서 만든다. 그래서 같은 공문을 몇 번을
-내려받아도 항상 같고, 이후 원리금 테이블이 바뀌어도 이미 발송한 공문 내용이 변하지 않는다.
+안내문 Excel/PDF 생성 — 첨부2 양식(6개 항목)을 그대로 재현한다.
+안내문은 '발송 당시 스냅샷'(GeneratedDocument.generated_data)에서 만든다. 그래서 같은 안내문을 몇 번을
+내려받아도 항상 같고, 이후 원리금 테이블이 바뀌어도 이미 발송한 안내문 내용이 변하지 않는다.
 원본과 같이 파생 칸(이자기간·상환후잔액·원리금합계·합계·검증)은 수식으로 둔다.
 """
 import io
@@ -86,6 +86,14 @@ def build_notice_workbook(data: dict) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Sheet1"
+    fill_notice_sheet(ws, data)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def fill_notice_sheet(ws, data: dict) -> None:
+    """안내문 1건을 시트 하나에 그린다(개별 내려받기·일괄 내려받기 공용). 수식은 같은 시트 안만 참조한다."""
     n = len(data["payments"])
 
     ws.column_dimensions["A"].width = 1.6
@@ -189,6 +197,70 @@ def build_notice_workbook(data: dict) -> bytes:
     ws.page_margins = PageMargins(left=0.6, right=0.6, top=0.8, bottom=0.8)
     ws.print_options.horizontalCentered = True
 
+
+_BAD_SHEET_CHARS = str.maketrans({c: " " for c in '[]:*?/\\'})
+
+
+def _sheet_name(i: int, label: str, used: set[str]) -> str:
+    base = f"{i}_{label}".translate(_BAD_SHEET_CHARS).strip()[:31]
+    name, k = base, 2
+    while name in used:
+        tail = f"({k})"
+        name, k = base[:31 - len(tail)] + tail, k + 1
+    used.add(name)
+    return name
+
+
+SUMMARY_HEAD = ("No", "상환예정일", "납부기한", "기숙사", "학교", "안내문", "납부금액", "발송일시", "수신확인", "입금확인")
+
+
+def build_notices_workbook(items: list[tuple[dict, dict]], *, summary: bool = True, subtitle: str = "") -> bytes:
+    """
+    일괄 내려받기(발송완료 조회 결과 전체) — items: [(목록 행, 안내문 스냅샷)].
+    summary=True면 첫 시트 '목록'에 조회 결과 표, 이어서 안내문 1건당 시트 1장(개별 내려받기와 같은 양식).
+    PDF(LibreOffice) 변환용으로는 summary=False(안내문 시트만).
+    """
+    wb = Workbook()
+    used: set[str] = set()
+    first = wb.active
+    if summary:
+        ws = first
+        ws.title = "목록"
+        used.add("목록")
+        _cell(ws, "A1", "발송완료 안내문 목록", bold=True, size=14, h="left", border=False)
+        if subtitle:
+            _cell(ws, "A2", subtitle, size=9, h="left", border=False)
+        for j, h in enumerate(SUMMARY_HEAD):
+            _cell(ws, f"{chr(65 + j)}4", h, bold=True, fill=HEADER_FILL)
+        for i, (row, data) in enumerate(items, start=1):
+            r = 4 + i
+            vals = (i, row["due_date"], row["payment_deadline"], row["dormitory_name"], row.get("school_name") or "",
+                    row["title"], row.get("total"), row.get("issued_at") or "", row.get("received_label", ""), row.get("pay_label", ""))
+            for j, v in enumerate(vals):
+                col = chr(65 + j)
+                fmt = MONEY if j == 6 else DATE_FMT if j in (1, 2) else None
+                _cell(ws, f"{col}{r}", v, fmt=fmt, h="right" if j == 6 else "left" if j in (3, 4, 5) else "center")
+        if items:
+            tr = 5 + len(items)
+            _cell(ws, f"A{tr}", "합계", bold=True, fill=TOTAL_FILL)
+            for col in "BCDEF":
+                _cell(ws, f"{col}{tr}", None, fill=TOTAL_FILL)
+            ws.merge_cells(f"A{tr}:F{tr}")
+            _cell(ws, f"G{tr}", f"=SUM(G5:G{tr - 1})", bold=True, fmt=MONEY, fill=TOTAL_FILL, h="right")
+            for col in "HIJ":
+                _cell(ws, f"{col}{tr}", None, fill=TOTAL_FILL)
+        for col, w in zip("ABCDEFGHIJ", (5, 12, 12, 22, 16, 40, 16, 18, 22, 18)):
+            ws.column_dimensions[col].width = w
+        ws.freeze_panes = "A5"
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+    for i, (row, data) in enumerate(items, start=1):
+        ws = first if (not summary and i == 1) else wb.create_sheet()
+        ws.title = _sheet_name(i, row["dormitory_name"] + "_" + str(row["due_date"]), used)
+        fill_notice_sheet(ws, data)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -241,8 +313,8 @@ def convert_xlsx_to_pdf(xlsx_bytes: bytes, timeout: int = 120) -> bytes:
 
 def notice_pdf(data: dict, xlsx_bytes: bytes | None = None) -> bytes:
     """
-    공문 PDF 만들기. PDF_ENGINE 설정:
-      auto(기본)  — LibreOffice가 있으면 Excel 공문을 그대로 PDF로 바꾸고, 없거나 실패하면 내장 방식으로 그린다
+    안내문 PDF 만들기. PDF_ENGINE 설정:
+      auto(기본)  — LibreOffice가 있으면 Excel 안내문을 그대로 PDF로 바꾸고, 없거나 실패하면 내장 방식으로 그린다
       builtin     — 항상 내장 방식(Render 무료처럼 메모리·CPU가 작은 서버 권장)
       libreoffice — LibreOffice만 사용(실패하면 오류)
     """
@@ -260,5 +332,25 @@ def notice_pdf(data: dict, xlsx_bytes: bytes | None = None) -> bytes:
             lo_error = e
     try:
         return build_notice_pdf(data, settings.PDF_FONT_PATH)
+    except FontMissing as e:
+        raise PdfUnavailableError(f"{e} " + (str(lo_error) if lo_error else INSTALL_HINT))
+
+
+def notices_pdf(items: list[tuple[dict, dict]]) -> bytes:
+    """일괄 PDF — 안내문 1건이 1페이지(길면 이어서)씩 한 파일에 이어진다. 엔진 선택 규칙은 notice_pdf와 같다."""
+    from app.core.config import settings
+    from app.engine.notice_pdf import FontMissing, build_notices_pdf
+    engine = (settings.PDF_ENGINE or "auto").lower()
+    lo_error = None
+    if engine in ("auto", "libreoffice"):
+        try:   # 시트마다 '한 페이지에 맞춤' 인쇄 설정 → 시트 순서대로 페이지가 된다
+            return convert_xlsx_to_pdf(build_notices_workbook(items, summary=False),
+                                       timeout=(60 if engine == "auto" else 120) + 2 * len(items))
+        except PdfUnavailableError as e:
+            if engine == "libreoffice":
+                raise
+            lo_error = e
+    try:
+        return build_notices_pdf([d for _, d in items], settings.PDF_FONT_PATH)
     except FontMissing as e:
         raise PdfUnavailableError(f"{e} " + (str(lo_error) if lo_error else INSTALL_HINT))

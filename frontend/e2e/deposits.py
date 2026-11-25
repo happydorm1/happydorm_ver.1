@@ -1,8 +1,8 @@
 """
-입금 확인·승인(Phase 23) E2E — 공문을 발급하고 입금을 등록하므로 '새로 만든 데모 DB'에서 돌린다.
+입금 확인·승인(Phase 23) E2E — 안내문을 발송하고 입금을 등록하므로 '새로 만든 데모 DB'에서 돌린다.
     python e2e/deposits.py http://127.0.0.1:8000 [스크린샷 폴더]
-확인: 메뉴(재단 직원만), 입금내역 양식·업로드 → 공문 금액과 같은 입금은 자동 승인(2천만 원 미만) 또는 대기(이상) → 승인 →
-상환 실적 반영, 대상 없는 입금 → 대기(대상 공문 없음) → 제외(사유), 되돌리기, 휴대폰 폭.
+확인: 메뉴(재단 직원만), 입금내역 양식·업로드 → 안내문 금액과 같은 입금은 자동 승인(2천만 원 미만) 또는 대기(이상) → 승인 →
+상환 실적 반영, 대상 없는 입금 → 대기(대상 안내문 없음) → 제외(사유), 되돌리기, 휴대폰 폭.
 """
 import datetime as dt
 import json
@@ -56,7 +56,7 @@ def login(page, email):
         _m.locator("button[aria-expanded='false']:visible").first.click()
 
 
-# 1) 오늘 이후 상환일이 있는 기숙사에 공문 발급(API)
+# 1) 오늘 이후 상환일이 있는 기숙사에 안내문 발송(API)
 tok = token("demo-admin@example.com")
 dash = api("/dashboard", tok, params={"as_of": TODAY.isoformat()})
 target = None
@@ -70,7 +70,7 @@ total = notice["generated_data"]["totals"]["total"]
 dname = notice["generated_data"]["dormitory"]["name"]
 over = total >= 20_000_000
 
-# 분할 입금(원금·이자 따로) 확인용 — 다른 기숙사 공문
+# 분할 입금(원금·이자 따로) 확인용 — 다른 기숙사 안내문
 t2 = next((ln for ln in dash["loans"] if ln.get("next_due_date") and ln["next_due_date"] >= TODAY.isoformat()
            and ln["status"] == "ACTIVE" and ln["dormitory_id"] != target["dormitory_id"]), None)
 assert t2, "분할 입금용 두 번째 기숙사 없음"
@@ -79,7 +79,7 @@ t2tot = n2["generated_data"]["totals"]
 d2name = n2["generated_data"]["dormitory"]["name"]
 ckey = str(900 + uuid.uuid4().int % 99)
 
-# 납부기한이 지난 미납 회차에도 공문 발급 + 수신처 등록(독촉 메일 확인용)
+# 납부기한이 지난 미납 회차에도 안내문 발송 + 수신처 등록(독촉 메일 확인용)
 od = dash["alerts"]["overdue"]["items"][0]
 od_dorm = od.get("dormitory_id") or next(x["dormitory_id"] for x in dash["loans"] if x["loan_id"] == od["loan_id"])
 api(f"/dormitories/{od_dorm}/notices", tok, body={"due_date": od["due_date"]})
@@ -117,17 +117,17 @@ with sync_playwright() as p:
     assert d.value.suggested_filename.endswith(".xlsx")
 
     page.get_by_label("입금내역 파일").set_input_files(str(xlsx))
-    page.get_by_role("button", name="올리고 공문과 맞추기").click()
+    page.get_by_role("button", name="올리고 안내문과 맞추기").click()
     expect(page.get_by_text("입금 2건 등록")).to_be_visible()
     expect(page.get_by_text(f"자동 승인 {0 if over else 1}건, 대기 {2 if over else 1}건")).to_be_visible()
     tbl = page.get_by_role("table", name="입금내역")
     unk = tbl.locator("tr", has_text=who)
-    expect(unk).to_contain_text("대상 공문 없음")
+    expect(unk).to_contain_text("대상 안내문 없음")
     shot(page, "dep01_pending")
 
     # 같은 파일 다시 → 중복으로 건너뜀
     page.get_by_label("입금내역 파일").set_input_files(str(xlsx))
-    page.get_by_role("button", name="올리고 공문과 맞추기").click()
+    page.get_by_role("button", name="올리고 안내문과 맞추기").click()
     expect(page.get_by_text("입금 0건 등록")).to_be_visible()
     expect(page.get_by_text("이미 등록된 거래 2건은 건너뜀")).to_be_visible()
 
@@ -185,7 +185,7 @@ with sync_playwright() as p:
     page.get_by_label("기간 시작").fill("")
     page.get_by_label("입금 상태").select_option("PAID")
     page.get_by_role("button", name="조회").click()
-    page.get_by_role("region", name="진행 단계 요약").get_by_role("button", name=re.compile("발급 전체")).click()
+    page.get_by_role("region", name="진행 단계 요약").get_by_role("button", name=re.compile("발송 전체")).click()
     irow = page.get_by_role("table", name="발송완료 목록").locator("tbody tr", has_text=dname)
     expect(irow).to_contain_text("입금 완료")
     expect(irow).to_contain_text(f"{TODAY.isoformat()} 10:21")
@@ -224,7 +224,7 @@ with sync_playwright() as p:
     cms.save(cpath)
     page.get_by_role("tab", name="대기", exact=False).first.click()
     page.get_by_label("입금내역 파일").set_input_files(str(cpath))
-    page.get_by_role("button", name="올리고 공문과 맞추기").click()
+    page.get_by_role("button", name="올리고 안내문과 맞추기").click()
     expect(page.get_by_text("분할 입금으로 묶인 건 2건")).to_be_visible()
     tbl = page.get_by_role("table", name="입금내역")
     split_rows = tbl.locator("tr", has_text=payer)

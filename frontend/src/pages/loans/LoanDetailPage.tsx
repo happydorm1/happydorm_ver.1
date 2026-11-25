@@ -44,7 +44,7 @@ export function LoanDetailPage({ id, tab, me, asOf }: { id: string; tab: Tab; me
           · 배정 {won(loan.assigned_amount)} <Badge tone={st.tone}>{st.label}</Badge></span>}
         actions={writable && <Button size="sm" variant="danger" onClick={() => setDelOpen(true)}>차입금 삭제</Button>} />
       {delOpen && <DeleteDialog title="차입금 삭제" target={`${dorm?.dormitory_name ?? ""} · ${loan.loan_code}`}
-        effects={["이 차입금과 원리금 테이블·납부·알림이 모든 화면·대시보드·Excel·공문 작성에서 빠집니다.",
+        effects={["이 차입금과 원리금 테이블·납부·알림이 모든 화면·대시보드·Excel·안내문 작성에서 빠집니다.",
           "삭제 중에는 같은 차입금 코드로 새로 등록할 수 있습니다."]}
         onClose={() => setDelOpen(false)}
         onConfirm={async (reason) => { await api.deleteLoan(loan.id, reason); setNextFlash(`차입금 '${loan.loan_code}'을(를) 삭제했습니다. 관리자 → 삭제·복구에서 되살릴 수 있습니다.`); go("loans"); }} />}
@@ -247,7 +247,7 @@ function RateDialog({ loan, canRecalc, onClose, onSaved }: { loan: Loan; canReca
 }
 
 const TABLE_LABEL: Record<string, string> = {
-  loan: "차입금", interest_rate_history: "금리이력", loan_event: "이벤트", actual_payment: "실제납부", bank_deposit: "입금 확인", generated_document: "공문",
+  loan: "차입금", interest_rate_history: "금리이력", loan_event: "이벤트", actual_payment: "실제납부", bank_deposit: "입금 확인", generated_document: "안내문",
   repayment_schedule_version: "원리금 테이블", event_request: "기안·결재",
 };
 

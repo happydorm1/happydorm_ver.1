@@ -1,20 +1,20 @@
 """
-Phase 23: 입금 확인·승인 — 은행 입금내역을 발급한 안내공문과 대사(짝짓기)해 상환 실적으로 연결한다.
+Phase 23: 입금 확인·승인 — 은행 입금내역을 발송한 안내문과 대사(짝짓기)해 상환 실적으로 연결한다.
 
 업무 기준(2026-11 확정)
-- 대사 단위: 공문 한 건(기숙사의 분기 원리금 합계)
-- 자동 승인: 공문 합계 2,000만 원 미만 + 입금액이 공문 합계와 1원까지 같음 + 납부기한 안 + 그 밖의 확인사항 없음
+- 대사 단위: 안내문 한 건(기숙사의 분기 원리금 합계)
+- 자동 승인: 안내문 합계 2,000만 원 미만 + 입금액이 안내문 합계와 1원까지 같음 + 납부기한 안 + 그 밖의 확인사항 없음
 - 그 밖에는 '대기'로 접수하고 재단 자금담당자(시스템관리자 포함, SPC 담당자 아님)가 확인·승인
-  · 2,000만 원 이상 / 금액 불일치 / 납부기한 경과(연체이자 정산 기준 확정 전) / 같은 금액 공문 여러 건 /
-    대상 공문 없음(분할·합산 입금 포함) / 이미 납부 기록 있음 / 공문 발급 후 원리금 테이블 변경
-- 완료되면 공문의 차입금별 원금·이자로 납부 기록(ActualPayment)을 만든다. 승인 취소 시 그 납부 기록도 취소한다.
+  · 2,000만 원 이상 / 금액 불일치 / 납부기한 경과(연체이자 정산 기준 확정 전) / 같은 금액 안내문 여러 건 /
+    대상 안내문 없음(분할·합산 입금 포함) / 이미 납부 기록 있음 / 안내문 발송 후 원리금 테이블 변경
+- 완료되면 안내문의 차입금별 원금·이자로 납부 기록(ActualPayment)을 만든다. 승인 취소 시 그 납부 기록도 취소한다.
 - 은행 연동(펌뱅킹·가상계좌)이 생기면 '입금내역을 가져오는 부분'만 바꾸면 된다(add_deposits).
 
 가상계좌(CMS) 입금내역 반영(2026-11-09, 은행 샘플 확인)
 - 은행 파일(.xls)의 가상계좌번호·고객KEY·입금인명(기재내역)·고객명으로 '어느 기숙사의 입금인지' 먼저 알아본다.
   기숙사명이 은행 CMS와 시스템이 달라도 가상계좌·고객KEY로 맞춘다(기숙사별 '입금 식별정보').
 - 기숙사마다 납입 방식이 다르다: ① 원리금 총액 한 번에 ② 원금·이자를 나눠 입금.
-  ②는 같은 기숙사의 대기 입금 여러 건 합계가 공문 합계와 1원까지 같으면 '분할 입금 묶음'으로 한 공문에 연결하고,
+  ②는 같은 기숙사의 대기 입금 여러 건 합계가 안내문 합계와 1원까지 같으면 '분할 입금 묶음'으로 한 안내문에 연결하고,
   묶음 전체를 한 건처럼 자동 승인 기준(2천만 원 미만·기한 내)에 따라 처리한다. 한쪽만 먼저 들어오면 '나머지 입금 대기'.
 """
 import csv
@@ -37,18 +37,18 @@ from app.models.organization import SPC, Dormitory
 from app.core.crypto import decrypt_str
 from app.models.payment import ActualPayment, BankDeposit, DepositStatus, PaymentStatus
 
-AUTO_APPROVE_LIMIT = 20_000_000   # 공문 합계가 이 금액 '미만'이면 자동 승인 대상
+AUTO_APPROVE_LIMIT = 20_000_000   # 안내문 합계가 이 금액 '미만'이면 자동 승인 대상
 
-SPLIT_MIN_REST = 10_000   # 공문 합계보다 1만 원 이상 적게 들어왔을 때만 분할 입금(나머지 대기)으로 본다
+SPLIT_MIN_REST = 10_000   # 안내문 합계보다 1만 원 이상 적게 들어왔을 때만 분할 입금(나머지 대기)으로 본다
 REASONS = {
     "OVER_LIMIT": "2,000만 원 이상 — 담당자 승인",
     "LATE": "납부기한 경과",
-    "AMOUNT_MISMATCH": "공문 금액과 다름",
-    "NO_MATCH": "대상 공문 없음(분할·합산 입금 등)",
-    "MULTI_MATCH": "같은 금액 공문 여러 건",
+    "AMOUNT_MISMATCH": "안내문 금액과 다름",
+    "NO_MATCH": "대상 안내문 없음(분할·합산 입금 등)",
+    "MULTI_MATCH": "같은 금액 안내문 여러 건",
     "ALREADY_PAID": "이미 납부 기록 있음",
-    "SCHEDULE_CHANGED": "공문 발급 후 원리금 테이블 변경",
-    "NOTICE_DONE": "다른 입금으로 이미 완료된 공문",
+    "SCHEDULE_CHANGED": "안내문 발송 후 원리금 테이블 변경",
+    "NOTICE_DONE": "다른 입금으로 이미 완료된 안내문",
     "SPLIT_WAIT": "분할 입금 — 나머지 입금 기다리는 중",
 }
 
@@ -226,7 +226,7 @@ def _name_hit(depositor: str, words: list[str]) -> bool:
 
 
 def _open_notices(db: Session) -> list[GeneratedDocument]:
-    """대사 대상 공문 — 삭제되지 않은 것 중 기숙사·상환일마다 가장 최근 발급본(재발급하면 이전 것은 대상에서 빠짐)."""
+    """대사 대상 안내문 — 삭제되지 않은 것 중 기숙사·상환일마다 가장 최근 발송본(재발송하면 이전 것은 대상에서 빠짐)."""
     docs = db.execute(select(GeneratedDocument).where(GeneratedDocument.is_deleted.is_(False))
                       .order_by(GeneratedDocument.created_at.desc())).scalars().all()
     seen, out = set(), []
@@ -297,7 +297,7 @@ def _members(db: Session, dep: BankDeposit) -> list[BankDeposit]:
 
 
 def _find_group(db: Session, dep: BankDeposit, cands: list[GeneratedDocument]):
-    """같은 기숙사의 대기 입금(묶이지 않은 것) 중 이 입금을 포함해 합계가 공문 합계와 같은 조합(2~4건)."""
+    """같은 기숙사의 대기 입금(묶이지 않은 것) 중 이 입금을 포함해 합계가 안내문 합계와 같은 조합(2~4건)."""
     from itertools import combinations
     if not dep.dormitory_id:
         return None, None
@@ -316,7 +316,7 @@ def _find_group(db: Session, dep: BankDeposit, cands: list[GeneratedDocument]):
 
 
 def match_notice(db: Session, dep: BankDeposit) -> tuple[GeneratedDocument | None, list[str], list[BankDeposit] | None]:
-    """입금 → (공문, 대사 단계 사유, 분할 묶음). 기숙사를 알면 그 기숙사 공문만 본다."""
+    """입금 → (안내문, 대사 단계 사유, 분할 묶음). 기숙사를 알면 그 기숙사 안내문만 본다."""
     done = _completed_notice_ids(db, exclude={dep.id})
     cands = [d for d in _open_notices(db) if d.id not in done and d.created_at.date() <= dep.deposit_date]
     if dep.dormitory_id:
@@ -329,7 +329,7 @@ def match_notice(db: Session, dep: BankDeposit) -> tuple[GeneratedDocument | Non
         return None, ["MULTI_MATCH"], None
     if len(same) == 1:
         return same[0], [], None
-    # ② 원금·이자 나눠 입금 — 같은 기숙사 대기 입금과 합쳐 공문 합계가 되면 묶음
+    # ② 원금·이자 나눠 입금 — 같은 기숙사 대기 입금과 합쳐 안내문 합계가 되면 묶음
     doc, group = _find_group(db, dep, cands)
     if doc is not None:
         return doc, [], group
@@ -337,7 +337,7 @@ def match_notice(db: Session, dep: BankDeposit) -> tuple[GeneratedDocument | Non
         near = sorted(cands, key=lambda d: abs((d.payment_deadline - dep.deposit_date).days))
         for d in near:      # 원금만·이자만 먼저 들어온 경우
             t = d.generated_data["totals"]
-            # 몇 원~몇천 원 모자란 건 계산 착오로 보고 '공문 금액과 다름'으로(나머지를 기다리지 않음)
+            # 몇 원~몇천 원 모자란 건 계산 착오로 보고 '안내문 금액과 다름'으로(나머지를 기다리지 않음)
             if dep.amount in (t["principal"], t["interest"]) or dep.amount <= t["total"] - SPLIT_MIN_REST:
                 return d, ["SPLIT_WAIT"], None
         if near:
@@ -351,7 +351,7 @@ def match_notice(db: Session, dep: BankDeposit) -> tuple[GeneratedDocument | Non
 
 
 def notice_checks(db: Session, deps: list[BankDeposit], doc: GeneratedDocument) -> list[str]:
-    """공문이 정해진 입금(또는 분할 묶음)의 확인사항(대기 사유) — 금액은 합계, 날짜는 마지막 입금일로 본다."""
+    """안내문이 정해진 입금(또는 분할 묶음)의 확인사항(대기 사유) — 금액은 합계, 날짜는 마지막 입금일로 본다."""
     reasons = []
     total = doc.generated_data["totals"]["total"]
     amount = sum(d.amount for d in deps)
@@ -398,7 +398,7 @@ def _create_payments(db: Session, deps: list[BankDeposit], doc: GeneratedDocumen
 
 
 def _mark_received_by_deposit(doc: GeneratedDocument | None) -> None:
-    """입금이 확인되면 공문을 받은 것으로 본다 — 미수신이면 '입금 확인으로 수신'(received_via=DEPOSIT)."""
+    """입금이 확인되면 안내문을 받은 것으로 본다 — 미수신이면 '입금 확인으로 수신'(received_via=DEPOSIT)."""
     if doc is not None and doc.received_at is None:
         doc.received_at = datetime.now(timezone.utc)
         doc.received_via = "DEPOSIT"
@@ -406,7 +406,7 @@ def _mark_received_by_deposit(doc: GeneratedDocument | None) -> None:
 
 
 def _unmark_received_by_deposit(db: Session, doc: GeneratedDocument | None, dep_ids: set) -> None:
-    """되돌리기: 입금으로 수신 처리했던 공문은 다른 완료 입금이 없으면 다시 미수신으로."""
+    """되돌리기: 입금으로 수신 처리했던 안내문은 다른 완료 입금이 없으면 다시 미수신으로."""
     if doc is None or doc.received_via != "DEPOSIT":
         return
     other = db.execute(select(BankDeposit.id).where(BankDeposit.notice_id == doc.id, BankDeposit.id.not_in(dep_ids),
@@ -437,7 +437,7 @@ def _complete(db: Session, deps: list[BankDeposit], doc: GeneratedDocument, user
 
 
 def _learn_ident(db: Session, deps: list[BankDeposit], doc: GeneratedDocument) -> None:
-    """담당자가 공문을 지정·승인하면 그 입금의 가상계좌·고객KEY·입금인명을 기숙사 입금 식별정보에 기억(비어 있을 때만)."""
+    """담당자가 안내문을 지정·승인하면 그 입금의 가상계좌·고객KEY·입금인명을 기숙사 입금 식별정보에 기억(비어 있을 때만)."""
     from app.core.crypto import encrypt_str
     dorm = db.get(Dormitory, doc.dormitory_id)
     if dorm is None:
@@ -459,7 +459,7 @@ def _learn_ident(db: Session, deps: list[BankDeposit], doc: GeneratedDocument) -
 
 
 def evaluate(db: Session, dep: BankDeposit, user_id, *, allow_auto: bool = True) -> None:
-    """기숙사 알아보기 → 공문 대사(한 건 또는 분할 묶음) → 자동 승인 또는 대기 사유 기록."""
+    """기숙사 알아보기 → 안내문 대사(한 건 또는 분할 묶음) → 자동 승인 또는 대기 사유 기록."""
     if dep.dormitory_id is None:
         dorm = identify_dormitory(db, dep)
         dep.dormitory_id = dorm.id if dorm else None
@@ -558,16 +558,16 @@ def _ungroup(db: Session, dep: BankDeposit) -> None:
 
 
 def assign(db: Session, deposit_id: uuid.UUID, notice_id: uuid.UUID | None, user_id) -> BankDeposit:
-    """대기 건의 공문을 지정(또는 해제)하고 확인사항을 다시 계산 — 지정만으로 완료되지는 않는다(승인 필요).
-    같은 기숙사의 대기 입금과 합쳐 공문 합계가 되면 분할 묶음으로 잇는다."""
+    """대기 건의 안내문을 지정(또는 해제)하고 확인사항을 다시 계산 — 지정만으로 완료되지는 않는다(승인 필요).
+    같은 기숙사의 대기 입금과 합쳐 안내문 합계가 되면 분할 묶음으로 잇는다."""
     dep = _get(db, deposit_id)
     if dep.status != DepositStatus.PENDING:
-        raise DepositError("대기 상태에서만 공문을 바꿀 수 있습니다.")
+        raise DepositError("대기 상태에서만 안내문을 바꿀 수 있습니다.")
     _ungroup(db, dep)
     if notice_id is not None:
         doc = db.get(GeneratedDocument, notice_id)
         if doc is None or doc.is_deleted:
-            raise DepositError("공문을 찾을 수 없습니다.")
+            raise DepositError("안내문을 찾을 수 없습니다.")
         _learn_ident(db, [dep], doc)
         db.flush()
         members = [dep]
@@ -597,7 +597,7 @@ def approve(db: Session, deposit_id: uuid.UUID, user_id, note: str | None) -> Ba
         raise DepositError("대기 상태인 입금만 승인할 수 있습니다.")
     doc = db.get(GeneratedDocument, dep.notice_id) if dep.notice_id else None
     if doc is None or doc.is_deleted:
-        raise DepositError("연결된 공문이 없습니다. 먼저 공문을 지정하세요(분할·합산 입금은 '수동 처리 완료').")
+        raise DepositError("연결된 안내문이 없습니다. 먼저 안내문을 지정하세요(분할·합산 입금은 '수동 처리 완료').")
     members = _members(db, dep)
     reasons = notice_checks(db, members, doc)
     blocking = [r for r in reasons if r in ("AMOUNT_MISMATCH", "NOTICE_DONE", "ALREADY_PAID", "SCHEDULE_CHANGED")]
@@ -672,7 +672,7 @@ def revert(db: Session, deposit_id: uuid.UUID, user_id, reason: str) -> BankDepo
 
 
 def notice_options(db: Session, deposit_id: uuid.UUID) -> list[GeneratedDocument]:
-    """공문 지정 후보 — 아직 다른 입금으로 완료되지 않은 최근 발급본(납부기한이 입금일에 가까운 순)."""
+    """안내문 지정 후보 — 아직 다른 입금으로 완료되지 않은 최근 발송본(납부기한이 입금일에 가까운 순)."""
     dep = _get(db, deposit_id)
     done = _completed_notice_ids(db, exclude={m.id for m in _members(db, dep)})
     docs = [d for d in _open_notices(db) if d.id not in done]

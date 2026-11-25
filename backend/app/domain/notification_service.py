@@ -121,7 +121,7 @@ def upcoming_rate_change(db: Session, loan: Loan, dorm: Dormitory, fund: Fund, v
 
 def _scan_unpaid_due_soon(db: Session, as_of: date, dormitory_id: uuid.UUID | None) -> int:
     """
-    납부기한 임박 미입금(Phase 23): 발급한 공문의 납부기한이 영업일 D-3 이내인데 입금(완료·대기)도 납부 기록도 없으면
+    납부기한 임박 미입금(Phase 23): 발송한 안내문의 납부기한이 영업일 D-3 이내인데 입금(완료·대기)도 납부 기록도 없으면
     재단 자금담당자(기숙사 담당자 포함)에게 한 번 알린다. 알림 종류 UNPAID_D3, 기준일 = 상환예정일.
     """
     from datetime import timedelta

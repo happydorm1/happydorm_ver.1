@@ -7,7 +7,7 @@ import { href } from "../lib/router";
 
 const TYPE: Record<string, { label: string; tone: "warning" | "critical" | "brand" }> = {
   RATE_CHANGE_D30: { label: "금리변동", tone: "warning" },
-  NOTICE_ISSUED: { label: "공문 발급", tone: "brand" },
+  NOTICE_ISSUED: { label: "안내문 발송", tone: "brand" },
   UNPAID_D3: { label: "미입금 임박", tone: "critical" },
 };
 const label = (t: string) => TYPE[t] ?? (t.startsWith("REPAYMENT_D") ? { label: `상환 D-${t.slice(11)}`, tone: "brand" as const } : { label: t, tone: "brand" as const });
@@ -45,9 +45,9 @@ export function NotificationsPage({ me, asOf }: { me: Me | null; asOf: string })
                   <p className="text-sm text-ink-2 mt-1 break-words">{n.body}</p>
                   <div className="text-xs text-ink-3 mt-1">{fmtDateTime(n.created_at)} ·
                     <a className="underline ml-1" href={href(`loans/${n.loan_id}`, { tab: "schedule" })}>원리금 테이블</a> ·
-                    {spc ? <a className="underline ml-1" href={href("notices/received", typeof n.payload?.notice_id === "string" ? { open: n.payload.notice_id } : {})}>공문</a>
+                    {spc ? <a className="underline ml-1" href={href("notices/received", typeof n.payload?.notice_id === "string" ? { open: n.payload.notice_id } : {})}>안내문</a>
                       : <><a className="underline ml-1" href={href("payments", { tab: "loan", loan: n.loan_id })}>납부</a> ·
-                        <a className="underline ml-1" href={href("notices", { tab: "issue", dormitory: n.dormitory_id })}>공문</a></>}</div>
+                        <a className="underline ml-1" href={href("notices", { tab: "issue", dormitory: n.dormitory_id })}>안내문</a></>}</div>
                 </div>
                 {!n.is_read && <Button size="sm" onClick={() => api.readNotification(n.id).then(() => reload(), (e) => setErr(e.message))}>읽음</Button>}
               </li>);

@@ -26,9 +26,9 @@ class Settings(BaseSettings):
     BACKUP_ALERT_HOURS: int = 36            # 이 시간 넘게 성공한 백업이 없으면 관리자에게 안내
     # 증빙자료 첨부(Phase 17) — 백업 대상에 이 폴더도 포함할 것(DB 백업에는 파일 본문이 들어가지 않는다)
     ATTACHMENT_DIR: str = "./attachments"
-    # 공문 PDF 변환기(LibreOffice) 실행파일 경로. 비우면 PATH와 기본 설치 위치(Windows·Mac)를 자동으로 찾는다
+    # 안내문 PDF 변환기(LibreOffice) 실행파일 경로. 비우면 PATH와 기본 설치 위치(Windows·Mac)를 자동으로 찾는다
     LIBREOFFICE_PATH: str = ""
-    PDF_ENGINE: str = "auto"      # auto | builtin | libreoffice — 공문 PDF 만드는 방식(notice_export.notice_pdf)
+    PDF_ENGINE: str = "auto"      # auto | builtin | libreoffice — 안내문 PDF 만드는 방식(notice_export.notice_pdf)
     PDF_FONT_PATH: str = ""       # 내장 PDF용 한글 글꼴 파일(비우면 Noto CJK·나눔고딕·맑은 고딕 순으로 찾음)
     ATTACHMENT_MAX_MB: int = 20
     ATTACHMENT_EXTENSIONS: str = "pdf,hwp,hwpx,doc,docx,xls,xlsx,csv,ppt,pptx,jpg,jpeg,png,gif,txt,zip"

@@ -82,7 +82,7 @@ class Dormitory(Base, AuditMixin):
         Enum(DormitoryStatus), default=DormitoryStatus.IN_PROGRESS, nullable=False
     )
 
-    # Phase 21: 기숙사별 입금계좌(공문에 인쇄). 비우면 공문 양식의 공통 계좌를 쓴다. 계좌번호는 암호화 저장
+    # Phase 21: 기숙사별 입금계좌(안내문에 인쇄). 비우면 안내문 양식의 공통 계좌를 쓴다. 계좌번호는 암호화 저장
     bank_account: Mapped[str | None] = mapped_column(String(400), nullable=True)
     account_holder: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # 은행 입금 식별정보(Phase 23 — 가상계좌 CMS): 입금내역의 가상계좌번호·고객KEY·입금인명으로 기숙사를 알아본다
@@ -97,7 +97,7 @@ class Dormitory(Base, AuditMixin):
 
 
 class DormitoryContact(Base, AuditMixin):
-    """Phase 18: 기숙사별 공문 수신처·연락처(학교·SPC 담당자). 지우지 않고 사용중지(is_active=False)."""
+    """Phase 18: 기숙사별 안내문 수신처·연락처(학교·SPC 담당자). 지우지 않고 사용중지(is_active=False)."""
     __tablename__ = "dormitory_contact"
 
     dormitory_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("dormitory.id"), nullable=False, index=True)
@@ -117,7 +117,7 @@ class DeletionRecord(Base, AuditMixin):
 
     target_type: Mapped[str] = mapped_column(String(20), nullable=False)      # DORMITORY / LOAN / SCHEDULE / NOTICE
     target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    label: Mapped[str] = mapped_column(String(300), nullable=False)           # 화면 표시용(기숙사명·차입금 코드·공문 제목)
+    label: Mapped[str] = mapped_column(String(300), nullable=False)           # 화면 표시용(기숙사명·차입금 코드·안내문 제목)
     reason: Mapped[str] = mapped_column(String(300), nullable=False)
     detail: Mapped[dict] = mapped_column(JSONB, nullable=False)               # 함께 숨긴 차입금·버전·알림, 원래 차입금 코드 등
     restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

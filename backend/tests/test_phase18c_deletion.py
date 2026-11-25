@@ -1,4 +1,4 @@
-"""Phase 18c — 관리자 삭제(숨김)·복구: 기숙사(소속 차입금 포함)·차입금·원리금 테이블·안내공문."""
+"""Phase 18c — 관리자 삭제(숨김)·복구: 기숙사(소속 차입금 포함)·차입금·원리금 테이블·안내문."""
 import uuid
 
 from _helpers import admin_headers, client, make_loan, make_org, spc_manager_headers
@@ -109,14 +109,14 @@ def test_delete_notice_and_dormitory_cascade_restore():
         return [n for n in client.get("/api/v1/notifications", headers=spc_h).json() if n["notification_type"] == "NOTICE_ISSUED"]
 
     assert len(spc_notice_alerts()) == 1
-    nrec = client.post(f"/api/v1/admin/delete/notices/{nid}", json={"reason": "잘못 발급"}, headers=h).json()
+    nrec = client.post(f"/api/v1/admin/delete/notices/{nid}", json={"reason": "잘못 발송"}, headers=h).json()
     assert client.get(f"/api/v1/dormitories/{dorm}/notices", headers=h).json() == []
     assert client.get(f"/api/v1/notices/{nid}", headers=h).status_code == 404
     assert spc_notice_alerts() == []
     assert client.post(f"/api/v1/admin/deletions/{nrec['id']}/restore", headers=h).status_code == 200
     assert len(client.get(f"/api/v1/dormitories/{dorm}/notices", headers=h).json()) == 1 and len(spc_notice_alerts()) == 1
 
-    # 기숙사 삭제 → 소속 차입금·공문·알림 모두 안 보임
+    # 기숙사 삭제 → 소속 차입금·안내문·알림 모두 안 보임
     overview = {d["id"]: d for d in client.get("/api/v1/admin/dormitories", headers=h).json()}
     assert overview[dorm]["loan_count"] == 1
     drec = client.post(f"/api/v1/admin/delete/dormitories/{dorm}", json={"reason": "가상 기숙사 정리"}, headers=h).json()

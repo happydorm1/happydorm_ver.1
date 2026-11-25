@@ -1,5 +1,5 @@
 """
-암호화 도입 전에 저장된 계좌번호(공문 양식·발급 공문 스냅샷)를 한 번에 암호화한다. 여러 번 실행해도 안전(이미 암호화된 값은 건너뜀).
+암호화 도입 전에 저장된 계좌번호(안내문 양식·발송 안내문 스냅샷)를 한 번에 암호화한다. 여러 번 실행해도 안전(이미 암호화된 값은 건너뜀).
     python -m app.jobs.encrypt_existing
 """
 from sqlalchemy.orm.attributes import flag_modified
@@ -27,7 +27,7 @@ def main() -> None:
         db.commit()
     finally:
         db.close()
-    print(f"암호화 완료: 공문 양식 {n_t}건, 발급 공문 {n_d}건")
+    print(f"암호화 완료: 안내문 양식 {n_t}건, 발송 안내문 {n_d}건")
 
 
 if __name__ == "__main__":

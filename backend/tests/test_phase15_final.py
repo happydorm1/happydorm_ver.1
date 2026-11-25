@@ -70,7 +70,7 @@ def test_verification_detects_tampering_and_unapplied_rate():
 
 
 def test_end_to_end_business_flow_section_50():
-    """§50: 기숙사 등록 → 차입금 → 원리금 테이블 → 검증 → 버전 → 이벤트 → 새 버전 → 알림 → 공문 → 납부 → 비교 → 이력 → 대시보드"""
+    """§50: 기숙사 등록 → 차입금 → 원리금 테이블 → 검증 → 버전 → 이벤트 → 새 버전 → 알림 → 안내문 → 납부 → 비교 → 이력 → 대시보드"""
     h = admin_headers()
     funds, cyc, mth = refs(h)
     spc, dorm = make_org(h)                                                          # 기숙사 등록
@@ -101,7 +101,7 @@ def test_end_to_end_business_flow_section_50():
     assert client.get("/api/v1/dashboard", params={"as_of": as_of, "dormitory_id": dorm},
                       headers=h).json()["alerts"]["needs_attention"]["midterm_pending"] == []
 
-    # 안내공문 자동생성(새 버전 값 연결)
+    # 안내문 자동생성(새 버전 값 연결)
     tpl = client.post("/api/v1/document-templates", json={"template_name": f"E2E-{dorm[:6]}",
                                                          "config": {"bank_account": "검증은행 000-00-000000", "account_holder": "검증"}}, headers=h).json()
     notice = client.post(f"/api/v1/dormitories/{dorm}/notices", json={"template_id": tpl["id"], "due_date": "2025-11-30"}, headers=h).json()

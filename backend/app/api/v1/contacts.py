@@ -1,4 +1,4 @@
-"""Phase 18: 기숙사별 공문 수신처·연락처 관리. 삭제 대신 사용중지(감사로그 남김)."""
+"""Phase 18: 기숙사별 안내문 수신처·연락처 관리. 삭제 대신 사용중지(감사로그 남김)."""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -138,7 +138,7 @@ def deactivate_contact(contact_id: uuid.UUID, payload: DeactivateIn, db: Session
 
 # ---------- Phase 21: 기숙사별 입금계좌 ----------
 class AccountIn(BaseModel):
-    bank_account: str | None = Field(default=None, max_length=120)   # 비우면 공통 계좌(공문 양식) 사용
+    bank_account: str | None = Field(default=None, max_length=120)   # 비우면 공통 계좌(안내문 양식) 사용
     account_holder: str | None = Field(default=None, max_length=100)
 
 

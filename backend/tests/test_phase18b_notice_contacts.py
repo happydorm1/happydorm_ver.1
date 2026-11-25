@@ -1,4 +1,4 @@
-"""Phase 18b — 공문 수신처·연락처, 발급 시 SPC 담당자 시스템 알림, PDF 변환기 찾기."""
+"""Phase 18b — 안내문 수신처·연락처, 발송 시 SPC 담당자 시스템 알림, PDF 변환기 찾기."""
 import uuid
 from pathlib import Path
 
@@ -64,16 +64,16 @@ def test_issue_notifies_spc_managers_once_per_due_date():
         return [n for n in client.get("/api/v1/notifications", headers=spc_h).json() if n["notification_type"] == "NOTICE_ISSUED"]
 
     got = mine()
-    assert len(got) == 1 and got[0]["title"].startswith("[안내공문]") and "납부기한" in got[0]["body"]
+    assert len(got) == 1 and got[0]["title"].startswith("[안내문]") and "납부기한" in got[0]["body"]
     assert client.post(f"/api/v1/notifications/{got[0]['id']}/read", headers=spc_h).status_code in (200, 204)
 
-    # 같은 상환일 공문을 다시 발급하면 알림이 늘지 않고 새 내용으로 갱신·안 읽음으로
+    # 같은 상환일 안내문을 다시 발송하면 알림이 늘지 않고 새 내용으로 갱신·안 읽음으로
     again = client.post(f"/api/v1/dormitories/{dorm}/notices", json={"due_date": "2023-05-31"}, headers=h)
     assert again.status_code == 201
     got = mine()
     assert len(got) == 1 and got[0]["is_read"] is False
 
-    # 목록·단건 조회 응답에는 알림 수가 기본값 0(발급 직후 응답에만 의미)
+    # 목록·단건 조회 응답에는 알림 수가 기본값 0(발송 직후 응답에만 의미)
     assert all(n["notified_users"] == 0 for n in client.get(f"/api/v1/dormitories/{dorm}/notices", headers=h).json())
 
 

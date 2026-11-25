@@ -1,5 +1,5 @@
 """
-Phase 23: 입금 확인·승인 — 입금내역(업로드·직접입력) ↔ 안내공문 대사, 2,000만 원 미만·1원 일치·기한 내 자동 승인,
+Phase 23: 입금 확인·승인 — 입금내역(업로드·직접입력) ↔ 안내문 대사, 2,000만 원 미만·1원 일치·기한 내 자동 승인,
 그 밖에는 대기 → 재단 자금담당자 승인. 완료 시 납부 기록 생성, 승인 취소 시 납부 기록 취소. SPC 담당자는 처리 불가.
 """
 import io
@@ -21,7 +21,7 @@ def _eom(d: date) -> date:
 
 
 def _setup(h, amount):
-    """오늘 이후 첫 상환일(다음 달 말)이 있는 차입금 + 그 상환일 공문 발급."""
+    """오늘 이후 첫 상환일(다음 달 말)이 있는 차입금 + 그 상환일 안내문 발송."""
     client.post("/api/v1/document-templates", json={"template_name": f"t-{uuid.uuid4().hex[:6]}", "config": ACCOUNT}, headers=h)
     spc, dorm = make_org(h)
     first = _eom(TODAY + relativedelta(months=1))
@@ -74,7 +74,7 @@ def test_auto_approve_under_limit_exact_amount():
 
 def test_one_won_difference_and_over_limit_go_pending_then_approve():
     h = admin_headers()
-    # 1원 차이 → 대기(금액 불일치, 입금자명으로 공문 추천) → 승인 불가 → 수동 처리 완료
+    # 1원 차이 → 대기(금액 불일치, 입금자명으로 안내문 추천) → 승인 불가 → 수동 처리 완료
     loan_id, _, _, n, dname = _setup(h, 100_000_000 + random.randint(1, 9_999) * 1_000)
     total = n["generated_data"]["totals"]["total"]
     _dep(h, depositor=dname, amount=total - 1)
@@ -82,7 +82,7 @@ def test_one_won_difference_and_over_limit_go_pending_then_approve():
     assert d["status"] == "PENDING" and d["notice"]["id"] == n["id"]
     assert [x["code"] for x in d["hold_reasons"]] == ["AMOUNT_MISMATCH"]
     r = client.post(f"/api/v1/deposits/{d['id']}/approve", json={}, headers=h)
-    assert r.status_code == 422 and "공문 금액과 다름" in r.text
+    assert r.status_code == 422 and "안내문 금액과 다름" in r.text
     r = client.post(f"/api/v1/deposits/{d['id']}/manual-complete", json={"reason": "1원 부족 — 상환 실적 관리에서 직접 입력"}, headers=h)
     assert r.status_code == 200 and r.json()["status"] == "COMPLETED" and r.json()["manual_done"] is True
     assert _paid(h, loan_id, n["due_date"])["paid_total"] == 0          # 수동 처리는 납부 기록을 만들지 않음
@@ -126,7 +126,7 @@ def test_upload_file_no_match_assign_and_exclude():
     assert res["added"] == 2 and res["pending"] == 2 and len(res["errors"]) == 1
     d = _find(h, who)
     assert d["notice"] is None and [x["code"] for x in d["hold_reasons"]] == ["NO_MATCH"] and d["file_name"] == "bank.xlsx"
-    # 공문 지정 → 확인사항 재계산(금액 다름) — 승인 불가
+    # 안내문 지정 → 확인사항 재계산(금액 다름) — 승인 불가
     opts = client.get(f"/api/v1/deposits/{d['id']}/notice-options", headers=h).json()
     assert any(o["id"] == n["id"] for o in opts)
     a = client.post(f"/api/v1/deposits/{d['id']}/assign", json={"notice_id": n["id"]}, headers=h).json()
@@ -137,7 +137,7 @@ def test_upload_file_no_match_assign_and_exclude():
     assert client.post(f"/api/v1/deposits/{d2['id']}/exclude", json={"reason": ""}, headers=h).status_code == 422
     e = client.post(f"/api/v1/deposits/{d2['id']}/exclude", json={"reason": "임대료 입금"}, headers=h).json()
     assert e["status"] == "EXCLUDED"
-    # 정상 금액 입금이 따로 오면 그 공문은 자동 승인되고, 앞의 대기 건에는 '이미 완료된 공문'이 표시
+    # 정상 금액 입금이 따로 오면 그 안내문은 자동 승인되고, 앞의 대기 건에는 '이미 완료된 안내문'이 표시
     _dep(h, depositor=dname, amount=total)
     assert _find(h, dname)["status"] == "COMPLETED"
     a2 = client.post(f"/api/v1/deposits/{d['id']}/assign", json={"notice_id": n["id"]}, headers=h).json()
@@ -205,7 +205,7 @@ def test_issued_list_shows_payment_status():
 
 
 def test_due_soon_unpaid_dashboard_notification_and_auto_receipt():
-    """납부기한 영업일 D-3 이내 미입금 → 대시보드 '납부기한 임박 미입금'·알림(UNPAID_D3, 1회). 입금 완료 → 공문 수신 자동 처리."""
+    """납부기한 영업일 D-3 이내 미입금 → 대시보드 '납부기한 임박 미입금'·알림(UNPAID_D3, 1회). 입금 완료 → 안내문 수신 자동 처리."""
     h = admin_headers()
     loan_id, dorm, _, n, dname = _setup(h, 100_000_000 + random.randint(1, 9_999) * 1_000)
     deadline = date.fromisoformat(n["payment_deadline"])
@@ -234,7 +234,7 @@ def test_due_soon_unpaid_dashboard_notification_and_auto_receipt():
     items = mine["items"] if isinstance(mine, dict) else mine
     assert any(x["notification_type"] == "UNPAID_D3" and dname in x["title"] for x in items)
 
-    # 입금 완료 → 공문 '입금 확인으로 수신', 임박 목록에서 빠짐 / 되돌리기 → 다시 미수신
+    # 입금 완료 → 안내문 '입금 확인으로 수신', 임박 목록에서 빠짐 / 되돌리기 → 다시 미수신
     assert client.get(f"/api/v1/notices/{n['id']}", headers=h).json()["received_at"] is None
     total = n["generated_data"]["totals"]["total"]
     _dep(h, depositor=dname, amount=total)
@@ -279,7 +279,7 @@ def _ident(h, dorm, **body):
 
 
 def test_split_principal_interest_grouped_by_customer_key():
-    """원금·이자를 나눠 입금(같은 날 2건) — 고객KEY로 기숙사를 알아보고 합계가 공문과 같으면 묶음. 2천만 원 이상이라 대기 → 한 번 승인으로 둘 다 완료."""
+    """원금·이자를 나눠 입금(같은 날 2건) — 고객KEY로 기숙사를 알아보고 합계가 안내문과 같으면 묶음. 2천만 원 이상이라 대기 → 한 번 승인으로 둘 다 완료."""
     h = admin_headers()
     loan_id, dorm, _, n, dname = _setup(h, 1_000_000_000 + random.randint(1, 9_999) * 1_000)
     t = n["generated_data"]["totals"]
@@ -329,7 +329,7 @@ def test_split_on_different_days_waits_then_auto_approves():
 
 
 def test_assign_learns_customer_key_for_next_time():
-    """처음 보는 고객KEY·입금인명 → 대상 공문 없음 → 담당자가 공문 지정 → 기숙사 식별정보에 기억 → 다음 입금은 자동으로 기숙사를 알아봄."""
+    """처음 보는 고객KEY·입금인명 → 대상 안내문 없음 → 담당자가 안내문 지정 → 기숙사 식별정보에 기억 → 다음 입금은 자동으로 기숙사를 알아봄."""
     h = admin_headers()
     loan_id, dorm, _, n, dname = _setup(h, 100_000_000 + random.randint(1, 9_999) * 1_000)
     t = n["generated_data"]["totals"]

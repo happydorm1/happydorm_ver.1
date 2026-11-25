@@ -165,7 +165,7 @@ def main() -> None:
         ok(c.post("/api/v1/users", json={"name": name, "email": email, "role": role, "password": "demo1234!",
                                          "can_download": role != "VIEWER"}, headers=H))
 
-    ok(c.post("/api/v1/document-templates", json={"template_name": "데모 상환 안내공문",
+    ok(c.post("/api/v1/document-templates", json={"template_name": "데모 상환 안내문",
                                                   "config": {"bank_account": "데모은행 000-000-000000", "account_holder": "데모기금"}}, headers=H))
     print(f"데모 데이터 생성 완료: 기숙사 {len(DORMS)}곳, 차입금 {len(loans)}건, 납부 {paid}건 (기준일 {as_of})")
     print(f"로그인(비밀번호 모두 {ADMIN[1]}): 관리자 {ADMIN[0]} · 자금담당 demo-fund@ · 결재권자 demo-approver@ · "

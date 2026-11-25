@@ -1,4 +1,4 @@
-"""안내공문(§28~29) — 양식 기준정보와 발급 이력(스냅샷)."""
+"""안내문(§28~29) — 양식 기준정보와 발송 이력(스냅샷)."""
 import uuid
 from datetime import date, datetime
 
@@ -11,7 +11,7 @@ from app.models.base import AuditMixin, Base
 
 class DocumentTemplate(Base, AuditMixin):
     """
-    공문 양식. 입금계좌처럼 기관이 정하는 값은 코드에 넣지 않고 양식 설정(config)으로 관리한다(44번).
+    안내문 양식. 입금계좌처럼 기관이 정하는 값은 코드에 넣지 않고 양식 설정(config)으로 관리한다(44번).
     config 예: {"bank_account": "...", "account_holder": "..."}
     """
 
@@ -25,8 +25,8 @@ class DocumentTemplate(Base, AuditMixin):
 
 class GeneratedDocument(Base, AuditMixin):
     """
-    발급된 공문. 발급 당시의 값을 스냅샷(generated_data)으로 보존한다 —
-    이후 원리금 테이블이 바뀌어도 이미 발송한 공문 내용은 그대로 재현된다.
+    발송된 안내문. 발송 당시의 값을 스냅샷(generated_data)으로 보존한다 —
+    이후 원리금 테이블이 바뀌어도 이미 발송한 안내문 내용은 그대로 재현된다.
     """
 
     __tablename__ = "generated_document"
@@ -37,7 +37,7 @@ class GeneratedDocument(Base, AuditMixin):
     payment_deadline: Mapped[date] = mapped_column(Date, nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     generated_data: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    # 기숙사(SPC 담당자) 수신: 담당자가 공문을 열람·내려받거나 공문 알림을 읽으면 처음 한 번 기록(재단 대시보드 '미수신' 판단)
+    # 기숙사(SPC 담당자) 수신: 담당자가 안내문을 열람·내려받거나 안내문 알림을 읽으면 처음 한 번 기록(재단 대시보드 '미수신' 판단)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     received_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     received_via: Mapped[str | None] = mapped_column(String(20), nullable=True)   # VIEW / DOWNLOAD / NOTIFICATION

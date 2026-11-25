@@ -57,7 +57,7 @@ function NoticeLine({ x, right }: { x: NoticeStatusItem; right?: ReactNode }) {
     <li className="py-2 flex items-start gap-2">
       <div className="min-w-0 flex-1">
         <div className="truncate">{x.dormitory_name} <span className="text-ink-3">· 상환일 {x.due_date}</span></div>
-        <div className="text-xs text-ink-3 tabular">납부기한 {x.payment_deadline} · 발급 {fmtDateTime(x.issued_at)}</div>
+        <div className="text-xs text-ink-3 tabular">납부기한 {x.payment_deadline} · 발송 {fmtDateTime(x.issued_at)}</div>
         {x.received && <div className="text-xs text-ink-3">수신 확인 · {x.received_by_name ?? ""} {VIA[x.received_via ?? ""] ?? ""} {fmtDateTime(x.received_at)}</div>}
       </div>
       <div className="text-right shrink-0 flex flex-col items-end gap-1">
@@ -84,7 +84,7 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
       detail: "영업일 계산이 주말만 반영됩니다. 공휴일 동기화를 실행하세요." }] : []),
   ];
 
-  const upcomingTitle = "안내공문 발송예정(상환예정)";
+  const upcomingTitle = "안내문 발송예정(상환예정)";
   const upcoming = (
     <Panel key="up" title={upcomingTitle} count={a.repayment_upcoming.count} tone="brand" icon="🗓" empty="D-15 이내 상환 예정이 없습니다.">
       <More title={upcomingTitle} items={a.repayment_upcoming.items} render={(x) => (
@@ -100,35 +100,35 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
             <span className="tabular" title={won(x.total)}>{compactWon(x.total)}원</span>
             {x.notice_issued
               ? <span className={`rounded border px-1.5 text-[11px] ${x.notice_received ? "border-good" : "border-warning text-warning-ink"}`}>
-                  발급완료{x.notice_received ? " · 수신" : " · 미수신"}</span>
-              : <a href={`#/notices?dormitory=${x.dormitory_id ?? ""}&due=${x.due_date}`} className="rounded border border-line px-1.5 text-[11px] hover:bg-surface-2">미발급 → 발급</a>}
+                  발송완료{x.notice_received ? " · 수신" : " · 미수신"}</span>
+              : <a href={`#/notices?dormitory=${x.dormitory_id ?? ""}&due=${x.due_date}`} className="rounded border border-line px-1.5 text-[11px] hover:bg-surface-2">미발송 → 발송</a>}
           </div>
         </li>
       )} />
     </Panel>
   );
 
-  const unreceivedTitle = "안내공문 미수신";
+  const unreceivedTitle = "안내문 미수신";
   const unreceived = notices.scope === "FOUNDATION" && (
     <Panel key="unrec" title={unreceivedTitle} count={notices.unreceived.count} tone="warning" icon="📭"
-      empty="발급한 공문은 모두 기숙사 측이 확인했습니다.">
+      empty="발송한 안내문은 모두 기숙사 측이 확인했습니다.">
       <More title={unreceivedTitle} items={notices.unreceived.items} render={(x) => (
         <NoticeLine key={x.notice_id} x={x} right={<a href={`#/notices?dormitory=${x.dormitory_id}`}
           className="rounded border border-warning px-1.5 text-[11px] text-warning-ink hover:bg-surface-2">미수신 · 메일 작성</a>} />
       )} />
-      <p className="text-[11px] text-ink-3 pt-1">기숙사(SPC 담당자)가 공문을 열람·내려받거나 알림을 읽으면 수신으로 바뀝니다. 납부기한까지 표시.</p>
+      <p className="text-[11px] text-ink-3 pt-1">기숙사(SPC 담당자)가 안내문을 열람·내려받거나 알림을 읽으면 수신으로 바뀝니다. 납부기한까지 표시.</p>
     </Panel>
   );
 
   const soonTitle = "납부기한 임박 미입금";
   const soon = notices.scope === "FOUNDATION" && notices.due_soon_unpaid && (
     <Panel key="soon" title={soonTitle} count={notices.due_soon_unpaid.count} tone="critical" icon="⏰"
-      empty={`납부기한 영업일 D-${notices.due_soon_unpaid.days} 이내 미입금 공문이 없습니다.`}>
+      empty={`납부기한 영업일 D-${notices.due_soon_unpaid.days} 이내 미입금 안내문이 없습니다.`}>
       <More title={soonTitle} items={notices.due_soon_unpaid.items} render={(x) => (
         <NoticeLine key={x.notice_id} x={x} right={<a href={`#/notices/issued?remind=${x.notice_id}`}
           className="rounded border border-critical px-1.5 text-[11px] text-critical-ink hover:bg-surface-2">D-{x.days_left} · 독촉 메일</a>} />
       )} />
-      <p className="text-[11px] text-ink-3 pt-1">발급한 공문의 납부기한이 영업일 D-{notices.due_soon_unpaid.days} 이내인데 입금(확인 중 포함)·납부 기록이 없는 기숙사입니다.</p>
+      <p className="text-[11px] text-ink-3 pt-1">발송한 안내문의 납부기한이 영업일 D-{notices.due_soon_unpaid.days} 이내인데 입금(확인 중 포함)·납부 기록이 없는 기숙사입니다.</p>
     </Panel>
   );
 
@@ -137,16 +137,16 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
     try { await downloadFile(`/notices/${x.notice_id}/download`, { format: "xlsx" }, `${x.title}.xlsx`); onChanged(); }
     catch (e) { setErr(e instanceof Error ? e.message : "내려받지 못했습니다."); }
   }
-  const receivedTitle = "안내공문 수신";
+  const receivedTitle = "안내문 수신";
   const received = notices.scope === "SPC" && (
     <Panel key="rec" title={receivedTitle} count={notices.received.count} tone={notices.received.unconfirmed ? "warning" : "neutral"}
-      icon="📨" empty="받은 안내공문이 없습니다.">
-      {notices.received.unconfirmed > 0 && <p className="text-xs text-warning-ink pb-1">새 공문 {notices.received.unconfirmed}건 — 열어 보거나 내려받으면 수신 확인됩니다.</p>}
-      <p className="text-xs pb-1"><a className="underline" href={href("notices/received")}>접수공문 전체 보기 →</a></p>
+      icon="📨" empty="받은 안내문이 없습니다.">
+      {notices.received.unconfirmed > 0 && <p className="text-xs text-warning-ink pb-1">새 안내문 {notices.received.unconfirmed}건 — 열어 보거나 내려받으면 수신 확인됩니다.</p>}
+      <p className="text-xs pb-1"><a className="underline" href={href("notices/received")}>접수 안내문 전체 보기 →</a></p>
       {err && <p role="alert" className="text-xs text-critical-ink pb-1">{err}</p>}
       <More title={receivedTitle} items={notices.received.items} render={(x) => (
         <NoticeLine key={x.notice_id} x={x} right={<span className="flex items-center gap-1">
-          {!x.received && <span className="rounded border border-warning px-1.5 text-[11px] text-warning-ink">새 공문</span>}
+          {!x.received && <span className="rounded border border-warning px-1.5 text-[11px] text-warning-ink">새 안내문</span>}
           {canDownload && <Button size="sm" onClick={() => download(x)}>내려받기</Button>}</span>} />
       )} />
     </Panel>
@@ -199,10 +199,10 @@ export function AlertPanels({ a, notices, canDownload, onChanged }: {
   );
 
   if (notices.scope === "FOUNDATION") {
-    // 관리자·자금담당자: 안내공문(발송예정·미수신) 한 줄 + 금리변동·미납·확인필요 한 줄
+    // 관리자·자금담당자: 안내문(발송예정·미수신) 한 줄 + 금리변동·미납·확인필요 한 줄
     return (
       <div className="space-y-3">
-        <div className={`grid gap-3 grid-cols-1 md:grid-cols-2 ${soon ? "xl:grid-cols-3" : ""}`} aria-label="안내공문 현황">{upcoming}{unreceived}{soon}</div>
+        <div className={`grid gap-3 grid-cols-1 md:grid-cols-2 ${soon ? "xl:grid-cols-3" : ""}`} aria-label="안내문 현황">{upcoming}{unreceived}{soon}</div>
         <div className="grid gap-3 grid-cols-1 md:grid-cols-3">{rate}{overdue}{check}</div>
       </div>
     );

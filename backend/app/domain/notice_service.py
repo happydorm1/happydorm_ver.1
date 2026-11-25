@@ -1,8 +1,8 @@
 """
-안내공문 자동생성(§28~29) — 기숙사 + 상환예정일을 고르면 공문의 모든 숫자를 원리금 테이블에서 자동 연결한다.
+안내문 자동생성(§28~29) — 기숙사 + 상환예정일을 고르면 안내문의 모든 숫자를 원리금 테이블에서 자동 연결한다.
 수기 입력은 없다. (첨부2에서는 숫자를 손으로 옮겨 적어 이자 한 건이 원본과 7원 어긋나 있었다 — 이를 없애는 것이 목적)
 
-한 기숙사에 차입금이 여러 건(재원별)일 수 있으므로 공문은 '기숙사 + 상환일' 단위로, 해당 상환일에
+한 기숙사에 차입금이 여러 건(재원별)일 수 있으므로 안내문은 '기숙사 + 상환일' 단위로, 해당 상환일에
 청구액이 있는 모든 차입금을 재원별 행으로 모아 합계까지 계산한다.
 """
 import uuid
@@ -108,7 +108,7 @@ def build_notice_data(
     if account_override:
         cfg.update({k: v for k, v in account_override.items() if v})
     if not cfg.get("bank_account") or not cfg.get("account_holder"):
-        raise NoticeError("입금계좌가 없습니다. 안내공문 › 해당 기숙사의 '입금계좌'를 등록하거나 공문 양식에 공통 계좌를 등록하세요.")
+        raise NoticeError("입금계좌가 없습니다. 안내문 › 해당 기숙사의 '입금계좌'를 등록하거나 안내문 양식에 공통 계좌를 등록하세요.")
 
     holidays = load_holidays(db)
     warnings = []
@@ -177,7 +177,7 @@ def get_active_template(db: Session, template_id: uuid.UUID | None) -> DocumentT
     if template_id is not None:
         t = db.get(DocumentTemplate, template_id)
         if t is None or t.is_deleted or not t.is_active:
-            raise NoticeError("공문 양식을 찾을 수 없습니다.")
+            raise NoticeError("안내문 양식을 찾을 수 없습니다.")
         return t
     t = db.execute(
         select(DocumentTemplate).where(DocumentTemplate.is_deleted.is_(False), DocumentTemplate.is_active.is_(True),
@@ -185,7 +185,7 @@ def get_active_template(db: Session, template_id: uuid.UUID | None) -> DocumentT
         .order_by(DocumentTemplate.created_at.desc())
     ).scalars().first()
     if t is None:
-        raise NoticeError("활성 공문 양식이 없습니다. 먼저 양식(입금계좌 포함)을 등록하세요.")
+        raise NoticeError("활성 안내문 양식이 없습니다. 먼저 양식(입금계좌 포함)을 등록하세요.")
     return t
 
 
@@ -202,7 +202,7 @@ def issue_notice(
     )
     db.add(doc)
     db.flush()
-    for src in data["sources"]:  # 공문에 포함된 차입금마다 발급 이력을 남긴다(차입금별 변경이력에서 조회 가능)
+    for src in data["sources"]:  # 안내문에 포함된 차입금마다 발송 이력을 남긴다(차입금별 변경이력에서 조회 가능)
         record_audit(db, table_name="generated_document", record_id=doc.id, loan_id=uuid.UUID(src["loan_id"]),
                      action="CREATE", user_id=user_id, field="title", before=None,
                      after=f"{data['title']} / 납부기한 {data['payment_deadline']}")
@@ -214,16 +214,16 @@ def issue_notice(
 
 
 def notify_notice_issued(db: Session, dormitory: Dormitory, doc: GeneratedDocument, data: dict) -> int:
-    """공문 발급 → 그 기숙사 SPC 담당자에게 시스템 알림(알림함). 같은 상환일 공문을 다시 발급하면 기존 알림을 새 내용으로 갱신."""
+    """안내문 발송 → 그 기숙사 SPC 담당자에게 시스템 알림(알림함). 같은 상환일 안내문을 다시 발송하면 기존 알림을 새 내용으로 갱신."""
     if not data.get("sources"):
         return 0
     users = db.execute(select(User).where(User.role == UserRole.SPC_MANAGER, User.spc_id == dormitory.spc_id,
                                           User.is_active.is_(True), User.is_deleted.is_(False))).scalars().all()
     loan_id = uuid.UUID(data["sources"][0]["loan_id"])
     t = data["totals"]
-    title = f"[안내공문] {doc.title}"
+    title = f"[안내문] {doc.title}"
     body = (f"상환예정일 {doc.due_date} · 납부기한 {doc.payment_deadline} · 납부금액 {t['total']:,}원"
-            f"(원금 {t['principal']:,} / 이자 {t['interest']:,}). 안내공문 메뉴의 발급 이력에서 Excel·PDF로 내려받을 수 있습니다.")
+            f"(원금 {t['principal']:,} / 이자 {t['interest']:,}). 안내문 메뉴의 발송 이력에서 Excel·PDF로 내려받을 수 있습니다.")
     payload = {"notice_id": str(doc.id), "dormitory_id": str(dormitory.id), "due_date": str(doc.due_date),
                "payment_deadline": str(doc.payment_deadline), "total": t["total"]}
     for u in users:

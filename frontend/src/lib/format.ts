@@ -3,7 +3,7 @@ const nf = new Intl.NumberFormat("ko-KR");
 
 /** 변경이력의 처리 구분(입금 확인·승인 등) 한글 이름 — 없는 값은 그대로 표시 */
 export const AUDIT_ACTION: Record<string, string> = {
-  APPROVE: "승인", AUTO_APPR: "자동 승인", MANUAL: "수동 처리 완료", EXCLUDE: "제외", REVERT: "되돌림", ASSIGN: "공문 지정",
+  APPROVE: "승인", AUTO_APPR: "자동 승인", MANUAL: "수동 처리 완료", EXCLUDE: "제외", REVERT: "되돌림", ASSIGN: "안내문 지정",
 };
 
 export const won = (n: number | null | undefined) => (n == null ? "-" : `${nf.format(n)}원`);

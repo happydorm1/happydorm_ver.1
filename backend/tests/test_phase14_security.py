@@ -46,7 +46,8 @@ def _login(email, pw=PW):
 
 # 역할과 무관하게 로그인한 사용자 누구나 쓸 수 있는 변경 API(본인 관련)
 SELF_SERVICE = {"/api/v1/auth/login", "/api/v1/auth/change-password", "/api/v1/popup/ack",
-                "/api/v1/notifications/{notification_id}/read", "/api/v1/notifications/read-all"}
+                "/api/v1/notifications/{notification_id}/read", "/api/v1/notifications/read-all",
+                "/api/v1/notices/bulk-download"}   # 쓰기 아님: id 목록을 본문으로 받는 일괄 내려받기(다운로드 권한·기숙사 범위는 따로 검사)
 APPROVAL_ACTIONS = {"/api/v1/event-requests/{request_id}/approve", "/api/v1/event-requests/{request_id}/reject",
                     "/api/v1/event-requests/{request_id}/withdraw"}
 ZERO = "00000000-0000-0000-0000-000000000000"
@@ -220,7 +221,7 @@ def test_bank_account_is_encrypted_at_rest_masked_in_lists_and_plain_in_notice()
     raw = db.execute(text("SELECT generated_data->'account'->>'bank_account' FROM generated_document WHERE id = :i"), {"i": n["id"]}).scalar()
     db.close()
     assert is_encrypted(raw)
-    assert n["generated_data"]["account"]["bank_account"] == acct                                  # 발급본은 실제 계좌
+    assert n["generated_data"]["account"]["bank_account"] == acct                                  # 발송본은 실제 계좌
     assert client.get(f"/api/v1/notices/{n['id']}", headers=h).json()["generated_data"]["account"]["bank_account"] == acct
     assert client.get(f"/api/v1/notices/{n['id']}/download", headers=h).status_code == 200
     assert mask_account("국민 000-12-3456") == "국민 ***-**-3456"

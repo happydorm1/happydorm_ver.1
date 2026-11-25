@@ -11,15 +11,15 @@ import { go } from "../lib/router";
 
 type Tab = "issue" | "templates";
 
-/** 안내공문(§28~29) — 기숙사·상환일만 고르면 원리금 테이블 값이 자동으로 채워진 공문 미리보기 → 발급(스냅샷) → Excel/PDF */
+/** 안내문(§28~29) — 기숙사·상환일만 고르면 원리금 테이블 값이 자동으로 채워진 안내문 미리보기 → 발송(스냅샷) → Excel/PDF */
 export function NoticesPage({ me, asOf, tab, dormId, due }: { me: Me | null; asOf: string; tab: Tab; dormId?: string; due?: string }) {
   const writer = canWrite(me);
-  const tabs = [{ value: "issue" as Tab, label: "공문 작성·발급·이력" }, ...(writer ? [{ value: "templates" as Tab, label: "공문 양식(공통 계좌)" }] : [])];
+  const tabs = [{ value: "issue" as Tab, label: "안내문 작성·발송·이력" }, ...(writer ? [{ value: "templates" as Tab, label: "안내문 양식(공통 계좌)" }] : [])];
   return (
     <div className="space-y-4">
-      <PageHeader title="공문 작성·발급" back={{ href: "#/notices/targets", label: "발송대상 현황" }}
-        sub="기숙사와 상환예정일을 고르면 원리금 테이블 값으로 공문이 자동 작성됩니다. 발급하면 그 시점 내용이 그대로 보존되고 '발송완료'로 넘어갑니다." />
-      <Tabs label="안내공문" value={tabs.some((t) => t.value === tab) ? tab : "issue"} onChange={(t) => go("notices", { tab: t, dormitory: dormId })} tabs={tabs} />
+      <PageHeader title="안내문 작성·발송" back={{ href: "#/notices/targets", label: "발송대상 현황" }}
+        sub="기숙사와 상환예정일을 고르면 원리금 테이블 값으로 안내문이 자동 작성됩니다. 발송하면 그 시점 내용이 그대로 보존되고 '발송완료'로 넘어갑니다." />
+      <Tabs label="안내문" value={tabs.some((t) => t.value === tab) ? tab : "issue"} onChange={(t) => go("notices", { tab: t, dormitory: dormId })} tabs={tabs} />
       {tab === "templates" && writer ? <Templates /> : <Issue key={`${dormId}-${due}`} me={me} asOf={asOf} dormId={dormId} initialDue={due} />}
     </div>
   );
@@ -57,10 +57,10 @@ function Issue({ me, asOf, dormId, initialDue }: { me: Me | null; asOf: string; 
     setConfirm(false); setBusy(true); setErr(null);
     try {
       const n = await api.issueNotice(dormId, { due_date: preview.due_date, payment_deadline: deadline || null });
-      const sent = n.notified_users ? ` SPC 담당자 ${n.notified_users}명의 시스템 알림함에 발급 안내를 보냈습니다.` : "";
-      setMsg(`'${n.title}' 공문을 발급했습니다.${sent} 아래 발급 이력에서 Excel·PDF로 내려받거나 '메일 작성'으로 수신처에 보낼 수 있습니다.`);
+      const sent = n.notified_users ? ` SPC 담당자 ${n.notified_users}명의 시스템 알림함에 발송 안내를 보냈습니다.` : "";
+      setMsg(`'${n.title}' 안내문을 발송했습니다.${sent} 아래 발송 이력에서 Excel·PDF로 내려받거나 '메일 작성'으로 수신처에 보낼 수 있습니다.`);
       setListKey((k) => k + 1);
-    } catch (e) { setErr(e instanceof Error ? e.message : "발급하지 못했습니다."); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "발송하지 못했습니다."); }
     finally { setBusy(false); }
   }
 
@@ -87,34 +87,34 @@ function Issue({ me, asOf, dormId, initialDue }: { me: Me | null; asOf: string; 
       </Card>
       {msg && <Notice tone="success" onClose={() => setMsg(null)}>{msg}</Notice>}
       {err && <Notice tone="error" onClose={() => setErr(null)}>{err}</Notice>}
-      {preview && <NoticePreview d={preview} actions={writer && <Button variant="primary" disabled={busy} onClick={() => setConfirm(true)}>{busy ? "발급 중…" : "이 내용으로 발급"}</Button>} />}
+      {preview && <NoticePreview d={preview} actions={writer && <Button variant="primary" disabled={busy} onClick={() => setConfirm(true)}>{busy ? "발송 중…" : "이 내용으로 발송"}</Button>} />}
       {confirm && preview && (
-        <Modal title="공문 발급 확인" onClose={() => setConfirm(false)} footer={<>
+        <Modal title="안내문 발송 확인" onClose={() => setConfirm(false)} footer={<>
           <Button onClick={() => setConfirm(false)}>취소</Button>
-          <Button variant="primary" onClick={issue}>발급</Button></>}>
-          <p className="font-semibold">발급 진행하시겠습니까?</p>
+          <Button variant="primary" onClick={issue}>발송</Button></>}>
+          <p className="font-semibold">발송 진행하시겠습니까?</p>
           <dl className="mt-3 grid grid-cols-[6rem_1fr] gap-y-1 text-sm">
-            <dt className="text-ink-2">공문</dt><dd>{preview.title}</dd>
+            <dt className="text-ink-2">안내문</dt><dd>{preview.title}</dd>
             <dt className="text-ink-2">상환예정일</dt><dd className="tabular">{preview.due_date}</dd>
             <dt className="text-ink-2">납부기한</dt><dd className="tabular">{preview.payment_deadline}</dd>
             <dt className="text-ink-2">납부금액</dt><dd className="tabular font-semibold">{won(preview.totals.total)}</dd>
           </dl>
-          <p className="mt-3 text-xs text-ink-2">발급하면 지금 내용이 그대로 저장되고(수정·삭제 불가, 필요하면 다시 발급), 이 기숙사 SPC 담당자의 시스템 알림함에 발급 안내가 갑니다.
-            메일 발송은 발급 이력의 '메일 작성'으로 합니다.</p>
+          <p className="mt-3 text-xs text-ink-2">발송하면 지금 내용이 그대로 저장되고(수정·삭제 불가, 필요하면 다시 발송), 이 기숙사 SPC 담당자의 시스템 알림함에 발송 안내가 갑니다.
+            이메일은 발송 이력의 '메일 작성'으로 보냅니다.</p>
         </Modal>
       )}
       {dormId && <IssuedList key={`${dormId}-${listKey}`} dormId={dormId} dormName={dorm?.dormitory_name ?? ""} canDownload={me?.can_download ?? false}
-        contacts={contacts.data ?? []} canDelete={isAdmin(me)} onDeleted={(t) => { setMsg(`'${t}' 공문을 삭제했습니다. 관리자 → 삭제·복구에서 되살릴 수 있습니다.`); setListKey((k) => k + 1); }} />}
+        contacts={contacts.data ?? []} canDelete={isAdmin(me)} onDeleted={(t) => { setMsg(`'${t}' 안내문을 삭제했습니다. 관리자 → 삭제·복구에서 되살릴 수 있습니다.`); setListKey((k) => k + 1); }} />}
       {dormId && <Contacts dormId={dormId} dormName={dorm?.dormitory_name ?? ""} writer={writer} onChanged={contacts.reload} />}
       {dormId && <AccountCard dormId={dormId} dormName={dorm?.dormitory_name ?? ""} writer={writer} onChanged={() => { if (preview) load(); }} />}
     </div>
   );
 }
 
-/** 첨부2 공문과 같은 순서(이자기간 → 대출잔액 → 상환금액)로 보여준다 */
-const IPMT_BG = { background: "rgba(146, 208, 80, 0.28)" };   // 초록 음영(IPMT 적용 융자 건) — Excel·PDF 공문과 같은 표시
+/** 첨부2 안내문과 같은 순서(이자기간 → 대출잔액 → 상환금액)로 보여준다 */
+const IPMT_BG = { background: "rgba(146, 208, 80, 0.28)" };   // 초록 음영(IPMT 적용 융자 건) — Excel·PDF 안내문과 같은 표시
 
-export function NoticePreview({ d, actions, title = "2. 공문 미리보기" }: { d: NoticeData; actions?: React.ReactNode; title?: string }) {
+export function NoticePreview({ d, actions, title = "2. 안내문 미리보기" }: { d: NoticeData; actions?: React.ReactNode; title?: string }) {
   const th = "px-3 py-2 font-medium text-xs text-ink-2 bg-surface-2";
   return (
     <Card title={title} actions={actions}>
@@ -183,11 +183,11 @@ function mailBody(n: NoticeT): string {
     `- 납부기한: ${n.payment_deadline}`,
     `- 납부금액: ${won(t.total)} (원금 ${won(t.principal)}, 이자 ${won(t.interest)})`,
     `- 입금계좌: ${g.account.bank_account} (${g.account.account_holder})`, "",
-    "자세한 내역은 첨부한 안내공문을 확인해 주십시오.", "",
+    "자세한 내역은 첨부한 안내문을 확인해 주십시오.", "",
   ].join("\r\n");
 }
 
-/** 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 연다. 공문 파일은 내려받아 직접 첨부한다. */
+/** 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 연다. 안내문 파일은 내려받아 직접 첨부한다. */
 function mailtoFor(n: NoticeT, to: string[], subject = n.title, body = mailBody(n)): string {
   return `mailto:${to.join(",")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
@@ -235,7 +235,7 @@ export function MailDialog({ n, contacts, onClose, reminder }: { n: NoticeT; con
       {copied && <div className="mt-2"><Notice tone="success" onClose={() => setCopied(null)}>{copied}을(를) 복사했습니다. 메일(웹메일 포함)에 붙여 넣으세요.</Notice></div>}
       <p className="mt-3 text-xs text-ink-3">이 시스템은 메일을 직접 보내지 않습니다. '메일 프로그램 열기'는 PC에 설정된 기본 메일 프로그램(Outlook 등)에
         받는 사람·제목·본문을 채워 열어 주며, 발송은 그 프로그램에서 합니다. 기본 메일 프로그램이 없거나 웹메일을 쓰면 '복사' 버튼으로 붙여 넣으세요.
-        공문 파일(Excel·PDF)은 내려받아 첨부합니다.</p>
+        안내문 파일(Excel·PDF)은 내려받아 첨부합니다.</p>
     </Modal>
   );
 }
@@ -249,9 +249,9 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
   const [mail, setMail] = useState<NoticeT | null>(null);
   const [err, setErr] = useState<string | null>(null);
   return (
-    <Card title={`발급 이력 — ${dormName}`}>
+    <Card title={`발송 이력 — ${dormName}`}>
       {(error || err) && <Notice tone="error" onClose={() => setErr(null)}>{error ?? err}</Notice>}
-      {!data ? <Loading /> : data.length === 0 ? <p className="text-sm text-ink-3">발급한 공문이 없습니다.</p> : (
+      {!data ? <Loading /> : data.length === 0 ? <p className="text-sm text-ink-3">발송한 안내문이 없습니다.</p> : (
         <ul className="divide-y divide-line">{data.map((n) => (
           <li key={n.id} className="py-2 flex flex-wrap items-center gap-2 text-sm">
             <button type="button" className="font-medium hover:underline text-left"
@@ -259,7 +259,7 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
             {n.received_at
               ? <span className="rounded border border-good px-1.5 text-[11px]" title={`${RECEIVED_VIA[n.received_via ?? ""] ?? ""} ${fmtDateTime(n.received_at)}`}>수신 확인</span>
               : <span className="rounded border border-warning px-1.5 text-[11px] text-warning-ink">미수신</span>}
-            <span className="text-xs text-ink-2 tabular">상환일 {n.due_date} · 납부기한 {n.payment_deadline} · 합계 {won(n.generated_data.totals.total)} · 발급 {fmtDateTime(n.created_at)}</span>
+            <span className="text-xs text-ink-2 tabular">상환일 {n.due_date} · 납부기한 {n.payment_deadline} · 합계 {won(n.generated_data.totals.total)} · 발송 {fmtDateTime(n.created_at)}</span>
             <span className="ml-auto flex gap-2">
             {contacts.some((c) => c.email)
               ? <Button size="sm" onClick={() => setMail(n)}>메일 작성</Button>
@@ -272,11 +272,11 @@ function IssuedList({ dormId, dormName, canDownload, contacts, canDelete = false
           </li>))}
         </ul>
       )}
-      <p className="mt-2 text-xs text-ink-3">발급본은 발급 당시 값으로 고정됩니다. 이후 원리금 테이블이 바뀌면 새로 발급하세요.
-        '메일 작성'에서 받는 사람을 체크해 고르면 PC의 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 엽니다 — 내려받은 공문(Excel·PDF)을 첨부해 보내세요.</p>
+      <p className="mt-2 text-xs text-ink-3">발송본은 발송 당시 값으로 고정됩니다. 이후 원리금 테이블이 바뀌면 새로 발송하세요.
+        '메일 작성'에서 받는 사람을 체크해 고르면 PC의 기본 메일 프로그램(Outlook 등)에 받는 사람·제목·본문을 채워 엽니다 — 내려받은 안내문(Excel·PDF)을 첨부해 보내세요.</p>
       {mail && <MailDialog n={mail} contacts={contacts} onClose={() => setMail(null)} />}
-      {del && <DeleteDialog title="안내공문 삭제" target={`${del.title} (상환일 ${del.due_date})`}
-        effects={["발급 이력에서 빠지고, SPC 담당자 알림함의 발급 안내도 함께 숨겨집니다.", "원리금 테이블·납부 기록에는 영향이 없습니다."]}
+      {del && <DeleteDialog title="안내문 삭제" target={`${del.title} (상환일 ${del.due_date})`}
+        effects={["발송 이력에서 빠지고, SPC 담당자 알림함의 발송 안내도 함께 숨겨집니다.", "원리금 테이블·납부 기록에는 영향이 없습니다."]}
         onClose={() => setDel(null)}
         onConfirm={async (reason) => { await api.deleteNotice(del.id, reason); const t = del.title; setDel(null); onDeleted?.(t); }} />}
       {view && <Modal wide title={view.title} onClose={() => setView(null)} footer={<Button onClick={() => setView(null)}>닫기</Button>}>
@@ -296,7 +296,7 @@ function Templates() {
   const [msg, setMsg] = useState<string | null>(null);
   return (
     <div className="space-y-4">
-      <Card title="공문 양식">
+      <Card title="안내문 양식">
         {error && <Notice tone="error">{error}</Notice>}
         {data && (data.length === 0 ? <p className="text-sm text-ink-3">양식이 없습니다. 아래에서 입금계좌를 등록하세요.</p> : (
           <ul className="divide-y divide-line">{data.map((t) => (
@@ -307,12 +307,12 @@ function Templates() {
             </li>))}
           </ul>
         ))}
-        <p className="mt-2 text-xs text-ink-3">계좌번호는 암호화해 저장하며 목록에는 끝 4자리만 보입니다. 여기 계좌는 <b>기숙사별 입금계좌를 등록하지 않은 기숙사</b>의 공문에 쓰는 공통 계좌입니다.
-          기숙사별 계좌는 공문 작성·발급 화면의 '입금계좌'에서 등록합니다.</p>
+        <p className="mt-2 text-xs text-ink-3">계좌번호는 암호화해 저장하며 목록에는 끝 4자리만 보입니다. 여기 계좌는 <b>기숙사별 입금계좌를 등록하지 않은 기숙사</b>의 안내문에 쓰는 공통 계좌입니다.
+          기숙사별 계좌는 안내문 작성·발송 화면의 '입금계좌'에서 등록합니다.</p>
       </Card>
       <Card title="새 양식(입금계좌) 등록">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="양식명" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 2027 상환 안내공문" /></Field>
+          <Field label="양식명" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 2027 상환 안내문" /></Field>
           <Field label="입금계좌(은행명 + 계좌번호)" required><input className={inputCls} value={acct} onChange={(e) => setAcct(e.target.value)} /></Field>
           <Field label="예금주" required><input className={inputCls} value={holder} onChange={(e) => setHolder(e.target.value)} /></Field>
         </div>
@@ -328,7 +328,7 @@ function Templates() {
 
 const EMPTY: ContactInput = { name: "", organization: "", position: "", email: "", phone: "", is_primary: false, note: "" };
 
-/** Phase 18: 기숙사별 공문 수신처·연락처 — 삭제 대신 사용중지(사유 필수) */
+/** Phase 18: 기숙사별 안내문 수신처·연락처 — 삭제 대신 사용중지(사유 필수) */
 function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dormName: string; writer: boolean; onChanged: () => void }) {
   const [all, setAll] = useState(false);
   const { data, error, reload } = useAsync<Contact[]>(() => api.contacts(dormId, all), [dormId, all]);
@@ -363,7 +363,7 @@ function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dor
     </div>}>
       {(error || (err && !edit && !off)) && <Notice tone="error" onClose={() => setErr(null)}>{error ?? err}</Notice>}
       {!data ? <Loading /> : data.length === 0 ? (
-        <p className="text-sm text-ink-3">등록된 연락처가 없습니다. 학교·SPC 담당자의 이메일을 등록하면 발급 이력에서 바로 메일을 작성할 수 있습니다.</p>
+        <p className="text-sm text-ink-3">등록된 연락처가 없습니다. 학교·SPC 담당자의 이메일을 등록하면 발송 이력에서 바로 메일을 작성할 수 있습니다.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="수신처·연락처">
@@ -414,7 +414,7 @@ function Contacts({ dormId, dormName, writer, onChanged }: { dormId: string; dor
   );
 }
 
-/** Phase 21: 기숙사별 입금계좌 — 수신처·연락처 아래. 비우면 공문 양식의 공통 계좌를 쓴다. */
+/** Phase 21: 기숙사별 입금계좌 — 수신처·연락처 아래. 비우면 안내문 양식의 공통 계좌를 쓴다. */
 function AccountCard({ dormId, dormName, writer, onChanged }: { dormId: string; dormName: string; writer: boolean; onChanged: () => void }) {
   const { data, error, reload } = useAsync<DormAccount>(() => api.dormAccount(dormId), [dormId]);
   const [edit, setEdit] = useState<{ bank_account: string; account_holder: string } | null>(null);
@@ -432,9 +432,9 @@ function AccountCard({ dormId, dormName, writer, onChanged }: { dormId: string; 
         {data.uses_common ? "기숙사 계좌 등록" : "변경"}</Button>}>
       {error && <Notice tone="error">{error}</Notice>}
       {data && !edit && (data.uses_common
-        ? <p className="text-sm text-ink-2" aria-label="입금계좌 상태">기숙사별 계좌가 없어 <b>공통 계좌</b>(공문 양식)로 공문이 작성됩니다.</p>
+        ? <p className="text-sm text-ink-2" aria-label="입금계좌 상태">기숙사별 계좌가 없어 <b>공통 계좌</b>(안내문 양식)로 안내문이 작성됩니다.</p>
         : <p className="text-sm" aria-label="입금계좌 상태"><b className="tabular">{data.bank_account}</b> · 예금주 {data.account_holder}
-            <Badge tone="good">이 기숙사 공문에 사용</Badge></p>)}
+            <Badge tone="good">이 기숙사 안내문에 사용</Badge></p>)}
       {edit && (
         <div className="grid gap-3 sm:grid-cols-[2fr_1fr_auto] items-end">
           <Field label="계좌번호(은행명 포함)"><input className={inputCls} aria-label="계좌번호" value={edit.bank_account}
@@ -451,7 +451,7 @@ function AccountCard({ dormId, dormName, writer, onChanged }: { dormId: string; 
         <button type="button" className="mt-2 text-xs underline text-ink-2" onClick={() => save({ bank_account: "", account_holder: "" })}>
           기숙사 계좌 지우고 공통 계좌 쓰기</button>}
       {err && <div className="mt-2"><Notice tone="error" onClose={() => setErr(null)}>{err}</Notice></div>}
-      <p className="mt-2 text-xs text-ink-3">계좌번호는 암호화해 저장합니다. 이미 발급한 공문은 발급 당시 계좌 그대로이며, 바꾼 계좌는 다음 발급부터 들어갑니다.</p>
+      <p className="mt-2 text-xs text-ink-3">계좌번호는 암호화해 저장합니다. 이미 발송한 안내문은 발송 당시 계좌 그대로이며, 바꾼 계좌는 다음 발송부터 들어갑니다.</p>
     </Card>
   );
 }

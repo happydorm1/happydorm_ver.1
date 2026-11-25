@@ -137,7 +137,7 @@ export const api = {
   dormIdents: () => request<DormIdent[]>("/deposits/dorm-idents"),
   putDormIdent: (id: string, body: { virtual_account: string | null; customer_key: string | null; payer_names: string[] }) =>
     request<{ ok: boolean }>(`/deposits/dorm-idents/${id}`, undefined, body, "PUT"),
-  // 안내공문
+  // 안내문
   templates: () => request<Template[]>("/document-templates"),
   createTemplate: (body: Record<string, unknown>) => request<Template>("/document-templates", undefined, body),
   deactivateTemplate: (id: string) => request<Template>(`/document-templates/${id}/deactivate`, undefined, {}),
@@ -205,10 +205,12 @@ export const api = {
 };
 
 /** 파일 내려받기(인증 헤더 포함) — 서버가 준 파일명(Content-Disposition)으로 저장한다. */
-export async function downloadFile(path: string, params: Record<string, string | undefined>, fallbackName: string): Promise<void> {
+export async function downloadFile(path: string, params: Record<string, string | undefined>, fallbackName: string, body?: unknown): Promise<void> {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => { if (v) qs.append(k, v); });
-  const res = await fetch(`/api/v1${path}?${qs}`, { headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {} });
+  const headers: Record<string, string> = auth.token ? { Authorization: `Bearer ${auth.token}` } : {};
+  const res = await fetch(`/api/v1${path}?${qs}`, body === undefined ? { headers }
+    : { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) });   // 많은 id는 본문(POST)으로
   if (res.status === 401) { auth.clear(); window.dispatchEvent(new Event("auth:expired")); throw new ApiError(401, "로그인이 만료되었습니다."); }
   if (!res.ok) {
     let detail = `내려받기 실패 (${res.status})`;
@@ -279,7 +281,7 @@ export async function uploadAttachment(loanId: string, file: File, form: { owner
   return res.json() as Promise<Attachment>;
 }
 
-/** 입금내역 파일(xlsx·csv) 업로드 → 공문 대사·자동 승인 결과 */
+/** 입금내역 파일(xlsx·csv) 업로드 → 안내문 대사·자동 승인 결과 */
 export async function uploadDeposits(file: File): Promise<DepositUploadResult> {
   const fd = new FormData();
   fd.append("file", file);

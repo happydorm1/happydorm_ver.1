@@ -1,4 +1,4 @@
-"""Phase 20 — 대시보드: 분기별 상환(예정)액(해당 연도 1~12월), 안내공문 발송예정·미수신(재단)·수신(SPC), 수신 기록."""
+"""Phase 20 — 대시보드: 분기별 상환(예정)액(해당 연도 1~12월), 안내문 발송예정·미수신(재단)·수신(SPC), 수신 기록."""
 import uuid
 
 from _helpers import admin_headers, client, make_loan, make_org, spc_manager_headers
@@ -59,7 +59,7 @@ def test_notice_upcoming_unreceived_and_spc_receipt():
     assert un["count"] == 1 and un["items"][0]["notice_id"] == nid and un["items"][0]["total"] > 0
     assert d["kpis"]["notice_unreceived_count"] == 1
 
-    # SPC 담당자: '안내공문 수신'에 자기 기숙사 공문, 미확인 1 → 내려받으면 수신
+    # SPC 담당자: '안내문 수신'에 자기 기숙사 안내문, 미확인 1 → 내려받으면 수신
     s = _dash(spc_h, "2023-05-20", dorm)
     assert s["notices"]["scope"] == "SPC" and "notice_unreceived_count" not in s["kpis"]
     assert s["notices"]["received"]["unconfirmed"] == 1 and s["notices"]["received"]["items"][0]["received"] is False
@@ -73,7 +73,7 @@ def test_notice_upcoming_unreceived_and_spc_receipt():
     assert d["alerts"]["repayment_upcoming"]["items"][0]["notice_received"] is True
     assert client.get(f"/api/v1/notices/{nid}", headers=h).json()["received_via"] == "DOWNLOAD"
 
-    # 같은 상환일 재발급 → 새 발급본은 다시 미수신. SPC가 공문 알림을 읽으면 수신
+    # 같은 상환일 재발송 → 새 발송본은 다시 미수신. SPC가 안내문 알림을 읽으면 수신
     nid2 = client.post(f"/api/v1/dormitories/{dorm}/notices", json={"due_date": "2023-05-31"}, headers=h).json()["id"]
     d = _dash(h, "2023-05-20", dorm)
     assert d["notices"]["unreceived"]["count"] == 1 and d["notices"]["unreceived"]["items"][0]["notice_id"] == nid2

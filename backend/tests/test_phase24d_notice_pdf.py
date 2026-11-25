@@ -1,4 +1,4 @@
-"""공문 PDF — LibreOffice가 없거나 실패해도 내장 방식(fpdf2)으로 만들어진다(2026-11-23)."""
+"""안내문 PDF — LibreOffice가 없거나 실패해도 내장 방식(fpdf2)으로 만들어진다(2026-11-23)."""
 import pytest
 
 from app.engine import notice_pdf

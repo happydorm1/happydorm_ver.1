@@ -1,7 +1,7 @@
 """
-메뉴 재구성(Phase 21) E2E — 공문 발급·차입금 삭제를 하므로 '새로 만든 데모 DB'에서 돌린다(브라우저 시계 2026-10-28).
+메뉴 재구성(Phase 21) E2E — 안내문 발송·차입금 삭제를 하므로 '새로 만든 데모 DB'에서 돌린다(브라우저 시계 2026-10-28).
     python e2e/menu21.py http://127.0.0.1:8000 [스크린샷 폴더]
-확인: 새 메뉴 구성, 발송대상 현황 → 행 클릭 → 공문 작성(자동 미리보기) → 기숙사 입금계좌 등록 → 발급 →
+확인: 새 메뉴 구성, 발송대상 현황 → 행 클릭 → 안내문 작성(자동 미리보기) → 기숙사 입금계좌 등록 → 발송 →
 발송대상에서 빠지고 발송완료(미수신) → 수신 상태 필터, 자금담당자 차입금 삭제, 이벤트 등록·상환 실적 관리 메뉴 이동.
 """
 import re
@@ -58,23 +58,23 @@ with sync_playwright() as p:
     l1, l2, l3 = st(grp), st(menu.get_by_role("button", name="차입금 등록")), st(menu.get_by_role("link", name="신규등록", exact=True))
     assert l1[0] > l2[0] > l3[0] and l1[1] >= 700 and l2[1] >= 700 and l3[1] < 700, (l1, l2, l3)
     assert page.evaluate("document.fonts.check('16px NanumSquare')") and "NanumSquare" in page.evaluate("getComputedStyle(document.body).fontFamily")
-    for t in ("차입금 마스터", "차입금 등록", "원리금 상환", "안내공문", "마이페이지", "관리자"):
+    for t in ("차입금 마스터", "차입금 등록", "원리금 상환", "안내문", "마이페이지", "관리자"):
         expect(menu).to_contain_text(t)
     for link in ("신규등록", "기존 차입금 이관", "이벤트 등록", "차입금 관리", "발송대상 현황", "발송완료", "상환 실적 관리",
                  "알림", "기준정보", "사용자·권한설정", "감사로그", "삭제·복구"):
         expect(menu.get_by_role("link", name=link, exact=True)).to_have_count(1)
     expect(menu.get_by_role("link", name="원리금 테이블", exact=True)).to_have_count(0)
 
-    # 발송대상 현황 → 미르기숙사(상환일 2026-10-31) → 공문 작성 화면(미리보기 자동)
+    # 발송대상 현황 → 미르기숙사(상환일 2026-10-31) → 안내문 작성 화면(미리보기 자동)
     nav(page, "발송대상 현황")
     tbl = page.get_by_role("table", name="발송대상 목록")
     row = tbl.locator("tbody tr", has_text="미르기숙사")
     expect(row).to_contain_text("2026-10-31")
-    expect(row).to_contain_text("미발급")
+    expect(row).to_contain_text("미발송")
     shot(page, "m21_01_targets")
-    row.get_by_role("button", name="공문 작성").click()
+    row.get_by_role("button", name="안내문 작성").click()
     expect(page).to_have_url(re.compile(r"#/notices\?dormitory=.+&due=2026-10-31"))
-    pv = page.locator("section[aria-label='2. 공문 미리보기']")
+    pv = page.locator("section[aria-label='2. 안내문 미리보기']")
     expect(pv).to_contain_text("[공통 계좌]")
 
     # 기숙사 입금계좌 등록 → 미리보기에 반영
@@ -87,16 +87,16 @@ with sync_playwright() as p:
     expect(pv).to_contain_text("미르은행 777-888-999000")
     expect(pv).to_contain_text("[기숙사 계좌]")
     shot(page, "m21_02_issue")
-    pv.get_by_role("button", name="이 내용으로 발급").click()
-    page.get_by_role("dialog", name="공문 발급 확인").get_by_role("button", name="발급", exact=True).click()
-    expect(page.get_by_text("공문을 발급했습니다")).to_be_visible()
+    pv.get_by_role("button", name="이 내용으로 발송").click()
+    page.get_by_role("dialog", name="안내문 발송 확인").get_by_role("button", name="발송", exact=True).click()
+    expect(page.get_by_text("안내문을 발송했습니다")).to_be_visible()
 
-    # 발송대상에서 빠지고, '발급한 건도 보기'면 발급완료·미수신
+    # 발송대상에서 빠지고, '발송한 건도 보기'면 발송완료·미수신
     nav(page, "발송대상 현황")
     expect(tbl.locator("tbody tr", has_text="미르기숙사")).to_have_count(0)
-    page.get_by_label("발급한 건도 보기").check()
+    page.get_by_label("발송한 건도 보기").check()
     page.get_by_role("button", name="조회").click()
-    expect(tbl.locator("tbody tr", has_text="미르기숙사")).to_contain_text("발급완료·미수신")
+    expect(tbl.locator("tbody tr", has_text="미르기숙사")).to_contain_text("발송완료·미수신")
 
     # 발송완료: 미수신 1건, 수신 상태 필터
     nav(page, "발송완료")
@@ -104,7 +104,7 @@ with sync_playwright() as p:
     expect(done.locator("tbody tr", has_text="미르기숙사")).to_contain_text("미수신")
     page.get_by_label("수신 상태").select_option("true")
     page.get_by_role("button", name="조회").click()
-    expect(page.get_by_text("조건에 맞는 발급 공문이 없습니다")).to_be_visible()
+    expect(page.get_by_text("조건에 맞는 발송 안내문이 없습니다")).to_be_visible()
     shot(page, "m21_03_issued")
 
     # 메뉴 이동 확인
@@ -144,5 +144,5 @@ with sync_playwright() as p:
     b.close()
     assert not errors, errors
 
-print("E2E OK: 새 메뉴 구성·토글·글자 위계·나눔스퀘어, 발송대상 → 공문 작성(자동 미리보기) → 기숙사 입금계좌 반영 → 발급 → 발송대상에서 빠짐·발송완료(미수신)·수신 필터, "
+print("E2E OK: 새 메뉴 구성·토글·글자 위계·나눔스퀘어, 발송대상 → 안내문 작성(자동 미리보기) → 기숙사 입금계좌 반영 → 발송 → 발송대상에서 빠짐·발송완료(미수신)·수신 필터, "
       "이벤트 등록·상환 실적 관리·기존 차입금 이관 이동, 자금담당자 차입금 삭제 → 관리자 복구, 휴대폰 폭")

@@ -170,7 +170,7 @@ export function UsersPage({ me }: { me: Me | null }) {
         <details className="mt-3 text-xs text-ink-2"><summary className="cursor-pointer">역할별 권한</summary>
           <ul className="mt-2 space-y-1 list-disc pl-5">
             <li><b>시스템관리자</b>: 전 기능 + 사용자·권한·기준정보·감사로그</li>
-            <li><b>재단 자금담당</b>: 차입금·이벤트·납부·공문 등록, 결재 모드에선 다른 사람 기안 승인</li>
+            <li><b>재단 자금담당</b>: 차입금·이벤트·납부·안내문 등록, 결재 모드에선 다른 사람 기안 승인</li>
             <li><b>재단 결재권자</b>: 조회 + 이벤트 승인·반려(본인 기안 불가)</li>
             <li><b>SPC 담당자</b>: 소속 SPC 기숙사만 조회</li><li><b>조회자</b>: 전체 조회, 다운로드는 사용자별 설정</li>
           </ul></details>
@@ -222,7 +222,7 @@ function UserDialog({ me, user, onClose, onSaved }: { me: Me | null; user: UserI
         <Field label={user ? "비밀번호 초기화(선택)" : "초기 비밀번호"} required={!user} className="sm:col-span-2"
           error={pwProblems.length ? pwProblems.join(" · ") : null} hint="영문 대·소문자·숫자·특수문자 중 2종류 10자 이상 또는 3종류 8자 이상">
           <input type="password" autoComplete="new-password" className={inputCls} value={f.password} onChange={(e) => set("password")(e.target.value)} /></Field>
-        {f.role === "VIEWER" && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={f.can_download} onChange={(e) => set("can_download")(e.target.checked)} />Excel·공문 다운로드 허용</label>}
+        {f.role === "VIEWER" && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={f.can_download} onChange={(e) => set("can_download")(e.target.checked)} />Excel·안내문 다운로드 허용</label>}
         {user && !self && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={f.is_active} onChange={(e) => set("is_active")(e.target.checked)} />계정 사용(해제하면 비활성 — 즉시 로그인 불가)</label>}
         {user && <Field label="변경 사유" className="sm:col-span-2"><input className={inputCls} value={f.reason} onChange={(e) => set("reason")(e.target.value)} placeholder="예: 인사이동" /></Field>}
       </div>
@@ -233,7 +233,7 @@ function UserDialog({ me, user, onClose, onSaved }: { me: Me | null; user: UserI
 
 // ---------------- 감사·접근기록, 백업·보안(§42, §45) ----------------
 const TABLE: Record<string, string> = { loan: "차입금", interest_rate_history: "금리이력", loan_event: "이벤트", actual_payment: "실제납부", bank_deposit: "입금 확인",
-  generated_document: "공문", event_request: "기안·결재", app_user: "사용자·권한", fund: "재원", code: "코드" };
+  generated_document: "안내문", event_request: "기안·결재", app_user: "사용자·권한", fund: "재원", code: "코드" };
 const ACTION: Record<string, string> = { VIEW: "조회", CHANGE: "변경", DOWNLOAD: "다운로드", DENIED: "거부", LOGIN_SUCCESS: "로그인", LOGIN_FAILED: "로그인 실패", LOGIN_LOCKED: "잠김 상태 로그인" };
 
 export function AuditPage({ me, tab }: { me: Me | null; tab: string }) {

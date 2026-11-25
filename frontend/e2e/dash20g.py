@@ -39,7 +39,7 @@ with sync_playwright() as p:
     kpis = page.locator("section[aria-label='주요 지표'] > div")
     labels = [re.sub(r"\(.*?\)|●|\s+", " ", kpis.nth(i).locator("div").first.inner_text()).strip() for i in range(kpis.count())]
     assert labels == ["전체 기숙사", "총 차입금", "총 잔여원금", "금월 상환예정", "다음 분기 상환예정",
-                      "안내공문 미수신", "미납", "금리변동 예정"], labels
+                      "안내문 미수신", "미납", "금리변동 예정"], labels
     nq = kpis.nth(4)
     expect(nq).to_contain_text("(2027년 1분기)")
     assert nq.locator("span.text-\\[10px\\]").evaluate("e => getComputedStyle(e).fontSize") == "10px"

@@ -68,14 +68,14 @@ export default function App() {
     title = "상환 실적 관리";
     page = <PaymentsPage me={me} asOf={asOf} tab={route.query.get("tab") === "loan" ? "loan" : "overdue"} loanId={route.query.get("loan") ?? undefined} />;
   } else if (section === "notices" && me?.role === "SPC_MANAGER") {
-    // SPC 담당자는 재단용 작성·발급 화면 대신 '접수공문'만 본다(공문 알림·옛 링크로 들어와도 여기로)
-    title = "안내공문 · 접수공문";
+    // SPC 담당자는 재단용 작성·발송 화면 대신 '접수 안내문'만 본다(안내문 알림·옛 링크로 들어와도 여기로)
+    title = "안내문 · 접수 안내문";
     page = <NoticeReceivedPage me={me} openId={route.query.get("open") ?? undefined} />;
   } else if (section === "notices") {
-    if (sub === "targets") { title = "안내공문 · 발송대상 현황"; page = <NoticeTargetsPage me={me} asOf={asOf} />; }
-    else if (sub === "issued") { title = "안내공문 · 발송완료"; page = <NoticeIssuedPage me={me} asOf={asOf} remindId={route.query.get("remind") ?? undefined} />; }
+    if (sub === "targets") { title = "안내문 · 발송대상 현황"; page = <NoticeTargetsPage me={me} asOf={asOf} />; }
+    else if (sub === "issued") { title = "안내문 · 발송완료"; page = <NoticeIssuedPage me={me} asOf={asOf} remindId={route.query.get("remind") ?? undefined} />; }
     else {
-      title = "안내공문 · 공문 작성·발급";
+      title = "안내문 · 안내문 작성·발송";
       page = <NoticesPage me={me} asOf={asOf} tab={route.query.get("tab") === "templates" ? "templates" : "issue"}
         dormId={route.query.get("dormitory") ?? undefined} due={route.query.get("due") ?? undefined} />;
     }
