@@ -1,6 +1,7 @@
 import uuid
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -21,6 +22,8 @@ class DeferralCreate(BaseModel):
     defer_target: DeferTarget
     recovery_cycle_months: int = Field(..., description="3=분기, 6=반기")
     recovery_count: int = Field(..., gt=0, le=40)
+    interest_pay_mode: Literal["CYCLE", "REGULAR"] = Field(
+        "CYCLE", description="원금 유예 시 회수 시작 전 유예원금 이자 납부일: CYCLE=회수주기마다 / REGULAR=정규 상환일에만")
     reason: str | None = None
 
     @field_validator("recovery_cycle_months")
@@ -48,6 +51,7 @@ class DeferralRead(BaseModel):
     recovery_cycle_months: int
     recovery_count: int
     recovery_start_date: date
+    interest_pay_mode: str = "CYCLE"
     recovery_rows: list[DeferralRecoveryRowRead] = []
 
 

@@ -72,6 +72,8 @@ class Deferral(Base, AuditMixin):
     recovery_cycle_months: Mapped[int] = mapped_column(Integer, nullable=False)  # 3=분기, 6=반기
     recovery_count: Mapped[int] = mapped_column(Integer, nullable=False)
     recovery_start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # 원금 유예 시 회수 시작 전 1년 동안 유예원금 이자를 내는 날(2026-11-28): CYCLE=회수주기마다(기본·세종) / REGULAR=정규 상환일에만(대구)
+    interest_pay_mode: Mapped[str] = mapped_column(String(10), default="CYCLE", server_default="CYCLE", nullable=False)
 
     loan_event: Mapped["LoanEvent"] = relationship(back_populates="deferral")
     recovery_rows: Mapped[list["DeferralRecoveryRow"]] = relationship(

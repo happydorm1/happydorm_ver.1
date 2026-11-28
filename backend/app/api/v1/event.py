@@ -48,6 +48,7 @@ def create_deferral(
             defer_target=payload.defer_target,
             recovery_cycle_months=payload.recovery_cycle_months,
             recovery_count=payload.recovery_count,
+            interest_pay_mode=payload.interest_pay_mode,
             reason=payload.reason,
             created_by=current_user.id,
         )

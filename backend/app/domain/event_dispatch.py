@@ -22,6 +22,7 @@ LABELS = {"DEFERRAL": "상환유예", "RATE_CHANGE": "금리변동", "ACCELERATI
 def _deferral(db, loan_id, p: DeferralCreate, by):
     e = apply_deferral(db, loan_id, event_date=p.event_date, defer_target=p.defer_target,
                        recovery_cycle_months=p.recovery_cycle_months, recovery_count=p.recovery_count,
+                       interest_pay_mode=p.interest_pay_mode,
                        reason=p.reason, created_by=by)
     return e.id, e.resulting_version_id
 

@@ -6,7 +6,7 @@
 2) 정규 스케줄의 다른 회차는 전혀 영향받지 않음(금액 불변)
 3) 동결일 + 1년부터, 입력된 주기(분기/반기)·횟수로 분할 회수 — 정규 회차 금액에 "가산"
 4) 유예원금 이자 — 원금+이자 유예: 회수 조각 × 회수체인 일수(첨부3)
-   원금만 유예: 잔여 유예원금 × 직전 납부일부터 일수, 동결 후 완제까지 모든 납부일(2018-12-28_주택)
+   원금만 유예: 잔여 유예원금 × 직전 납부일부터 일수 — 유예 상환일부터, 회수 주기마다 마지막 회수일까지(세종 2022-03-31_주택)
 5) 마지막 회수회차에서 원단위 자동보정
 6) 기존 스케줄은 삭제하지 않고 새 버전(V+1)으로 저장
 """
@@ -56,6 +56,7 @@ def apply_deferral(
     recovery_cycle_months: int,
     recovery_count: int,
     reason: str | None,
+    interest_pay_mode: str = "CYCLE",
     created_by: uuid.UUID | None,
 ) -> LoanEvent:
     loan = db.get(Loan, loan_id)
@@ -155,6 +156,7 @@ def apply_deferral(
         recovery_cycle_months=recovery_cycle_months,
         recovery_count=recovery_count,
         recovery_start_date=recovery_start_date,
+        interest_pay_mode=interest_pay_mode if defer_target == DeferTarget.PRINCIPAL else "CYCLE",
         created_by=created_by,
     )
     db.add(deferral)
@@ -244,29 +246,55 @@ def apply_deferral(
         chain_prev_due = due_date
         due_date = add_months_eom(due_date, recovery_cycle_months)
 
-    # 4-1) 원금만 유예 — 잔여 유예원금 이자
+    # 4-1) 원금만 유예 — 잔여 유예원금 이자 (2026-11-28 기준 변경: 세종 2022-03-31_주택 수작업 테이블)
+    #  · 이자 시작일 = 유예 상환일(동결 회차의 상환예정일). 그 회차 정규이자에 이미 유예원금분이 들어 있으므로
+    #    이자계산 시작일부터 세면 이중 부과가 된다(예전 대구 2018-12-28_주택 방식은 폐기).
+    #  · 회수 시작 전 1년의 납부일(건별 선택 interest_pay_mode):
+    #      CYCLE(기본, 세종)  = 유예 상환일부터 회수 주기(분기/반기)마다 — 정규 상환일이 아닌 날은 이자 전용 행을 새로 만든다
+    #      REGULAR(대구)      = 그 사이 정규 상환일에만
+    #    회수가 시작된 뒤에는 둘 다 회수일 + 그 사이 정규 상환일.
+    #  · 금액 = ROUND(잔여 유예원금 × 금리 × 직전 납부일부터 일수 / 365), 마지막 회수일까지.
     if balance_mode and recovery_dates:
         last_recovery = recovery_dates[-1][0]
-        recovered_before = 0
         recovery_on: dict[date, int] = {}
         for d, _, amt in recovery_dates:
             recovery_on[d] = recovery_on.get(d, 0) + amt
-        # 첫 이자 기간의 시작 = 동결 회차(실지급 행)의 이자계산 시작일. 동결 회차의 정규 이자는 유예원금을
-        # 제하지 않고 그대로 두고, 유예원금 이자를 그 기간부터 추가로 부과한다(수작업 테이블 AD30 = V29+V30, 244일).
-        prev = frozen_row.interest_calc_start or frozen_row.due_date
-        for d in all_due_dates_sorted:
-            if d <= frozen_row.due_date or d > last_recovery:
-                continue
-            cands = [r for r in rows_by_due_date[d] if r.row_type != RowType.YEAR_END_SPLIT_MEMO]
-            if not cands:
-                continue
-            target_row = max(cands, key=lambda r: r.seq_no)
+        pay_dates: set[date] = set(recovery_on)
+        # 정규 상환일(동결 이후 ~ 마지막 회수일) — 두 방식 공통
+        pay_dates |= {d for d in all_due_dates_sorted if frozen_row.due_date < d <= last_recovery
+                      and any(r.row_type != RowType.YEAR_END_SPLIT_MEMO for r in rows_by_due_date[d])}
+        if interest_pay_mode != "REGULAR":
+            d = add_months_eom(frozen_row.due_date, recovery_cycle_months)
+            while d < last_recovery:
+                pay_dates.add(d)
+                d = add_months_eom(d, recovery_cycle_months)
+
+        prev = frozen_row.due_date
+        recovered_before = 0
+        for d in sorted(pay_dates):
+            cands = [r for r in rows_by_due_date.get(d, []) if r.row_type != RowType.YEAR_END_SPLIT_MEMO]
+            if cands:
+                target_row = max(cands, key=lambda r: r.seq_no)
+            else:   # 회수 시작 전 분기일 등 — 이자 전용 행 삽입
+                target_row = RepaymentScheduleRow(
+                    version_id=new_version.id, seq_no=-1, due_date=d, interest_calc_start=prev, interest_calc_end=d,
+                    days=days_between(prev, d), installment_no=None, balance_before=0, principal_amount=0,
+                    interest_amount=0, unpaid_interest_amount=0, balance_after=0,
+                    applied_rate=float(get_applicable_rate(db, loan_id, d)), row_type=RowType.DEFERRAL_RECOVERY,
+                    created_by=created_by,
+                )
+                db.add(target_row)
+                db.flush()
+                rows_by_due_date.setdefault(d, []).append(target_row)
+                newly_inserted_rows.append(target_row)
             remaining = frozen_principal_total - recovered_before
-            interest = calc_simple_interest(remaining, days_between(prev, d), float(target_row.applied_rate),
-                                            loan.interest_rounding)
+            # 연도가 바뀌면 12/31에서 나눠 각각 반올림(수작업 테이블과 같은 방식 — 원 단위까지 일치)
+            cuts = [prev] + [date(y, 12, 31) for y in range(prev.year, d.year)] + [d]
+            interest = sum(calc_simple_interest(remaining, days_between(a, b), float(target_row.applied_rate),
+                                                loan.interest_rounding) for a, b in zip(cuts, cuts[1:]) if b > a)
             rr = recovery_by_target.get(target_row.id)
             if rr is None:
-                # 회수 시작 전 정규회차 — 회수원금 0, 유예원금 이자만(순번 0)
+                # 회수 시작 전 납부일 — 회수원금 0, 유예원금 이자만(순번 0)
                 rr = DeferralRecoveryRow(
                     deferral_id=deferral.id, schedule_row_id=target_row.id, installment_seq=0,
                     recovery_principal=0, recovery_interest=0, additional_interest_on_frozen_principal=0,

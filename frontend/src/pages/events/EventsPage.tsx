@@ -46,7 +46,7 @@ export function EventsPage({ me, asOf, tab, loanId }: { me: Me | null; asOf: str
   );
 }
 
-const FORM_DEFAULT: Record<string, string> = { defer_target: "PRINCIPAL_INTEREST", recovery_cycle_months: "3", recovery_count: "10",
+const FORM_DEFAULT: Record<string, string> = { defer_target: "PRINCIPAL_INTEREST", recovery_cycle_months: "3", recovery_count: "10", interest_pay_mode: "CYCLE",
   acceleration_multiplier: "1.5", repay_type: "PARTIAL", fee_amount: "0", refi_type: "FULL" };
 
 function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: string }) {
@@ -71,7 +71,8 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
     const reason = f.reason || null;
     switch (kind) {
       case "rate-change": return { effective_start_date: f.effective_start_date, effective_end_date: f.effective_end_date || null, annual_rate: f.annual_rate, rate_table_name: f.rate_table_name || null, rate_basis: f.rate_basis || null };
-      case "deferral": return { event_date: f.event_date, defer_target: f.defer_target, recovery_cycle_months: Number(f.recovery_cycle_months), recovery_count: Number(f.recovery_count), reason };
+      case "deferral": return { event_date: f.event_date, defer_target: f.defer_target, recovery_cycle_months: Number(f.recovery_cycle_months), recovery_count: Number(f.recovery_count),
+        ...(f.defer_target === "PRINCIPAL" ? { interest_pay_mode: f.interest_pay_mode || "CYCLE" } : {}), reason };
       case "acceleration": return { event_date: f.event_date, acceleration_multiplier: f.acceleration_multiplier, reason };
       case "early-repayment": return { event_date: f.event_date, repay_type: f.repay_type, repay_amount: f.repay_type === "PARTIAL" ? money.repay_amount : null, fee_amount: money.fee_amount ?? 0, reason };
       case "refinancing": return { refi_type: f.refi_type, event_date: f.event_date, new_fund_id: f.new_fund_id, new_annual_rate: f.new_annual_rate,
@@ -123,7 +124,8 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
       ["새 금리", f.annual_rate ? `${f.annual_rate}%` : ""]);
     else r.push(["접수일", f.event_date]);
     if (kind === "deferral") r.push(["유예대상", { PRINCIPAL: "원금", PRINCIPAL_INTEREST: "원금+이자", INTEREST: "이자" }[f.defer_target] ?? ""],
-      ["회수", `${f.recovery_cycle_months === "3" ? "분기" : "반기"} ${f.recovery_count}회`]);
+      ["회수", `${f.recovery_cycle_months === "3" ? "분기" : "반기"} ${f.recovery_count}회`],
+      ...(f.defer_target === "PRINCIPAL" ? [["유예기간 이자 납부", f.interest_pay_mode === "REGULAR" ? "정규 상환일에만" : "회수 주기마다"] as [string, string]] : []));
     if (kind === "acceleration") r.push(["가속배율", `${f.acceleration_multiplier}배`]);
     if (kind === "early-repayment") r.push(["방식", f.repay_type === "FULL" ? "전액" : "일부"], ...(f.repay_type === "PARTIAL" ? [["금액", won(money.repay_amount ?? 0)] as [string, string]] : []), ["수수료", won(money.fee_amount ?? 0)]);
     if (kind === "refinancing") r.push(["방식", f.refi_type === "FULL" ? "전액" : "일부"], ["새 재원", ref?.funds.find((x) => x.id === f.new_fund_id)?.fund_name ?? ""], ["새 금리", f.new_annual_rate ? `${f.new_annual_rate}%` : ""]);
@@ -169,10 +171,18 @@ function NewEvent({ me, asOf, loanId }: { me: Me | null; asOf: string; loanId?: 
             </> : <Field label="접수일(적용일)" required hint={kind === "deferral" ? "이 날짜 이후 첫 상환 회차를 동결합니다." : undefined}>
               <input type="date" className={inputCls} value={form.event_date ?? ""} onChange={(e) => set("event_date")(e.target.value)} /></Field>}
             {kind === "deferral" && <>
-              <Field label="유예대상"><select className={inputCls} value={form.defer_target} onChange={(e) => set("defer_target")(e.target.value)}>
+              <Field label="유예대상" hint={form.defer_target === "PRINCIPAL"
+                ? "유예원금 이자는 유예된 상환일부터 계산합니다." : undefined}><select className={inputCls} value={form.defer_target} onChange={(e) => set("defer_target")(e.target.value)}>
                 <option value="PRINCIPAL_INTEREST">원금+이자</option><option value="PRINCIPAL">원금</option><option value="INTEREST">이자</option></select></Field>
               <Field label="회수주기"><select className={inputCls} value={form.recovery_cycle_months} onChange={(e) => set("recovery_cycle_months")(e.target.value)}>
                 <option value="3">분기(3개월)</option><option value="6">반기(6개월)</option></select></Field>
+              {form.defer_target === "PRINCIPAL" && (
+                <Field label="유예기간 이자 납부" hint={form.interest_pay_mode === "REGULAR"
+                  ? "회수 시작 전 1년 동안은 원래 정규 상환일에만 유예원금 이자를 냅니다(예: 대구 2018-12-28_주택)."
+                  : "회수 시작 전 1년 동안에도 회수주기마다 유예원금 이자를 냅니다(기본, 예: 세종 2022-03-31_주택)."}>
+                  <select className={inputCls} value={form.interest_pay_mode || "CYCLE"} onChange={(e) => set("interest_pay_mode")(e.target.value)}>
+                    <option value="CYCLE">회수 주기마다</option><option value="REGULAR">정규 상환일에만</option></select></Field>
+              )}
               <Field label="회수횟수" hint="1~40회"><input inputMode="numeric" className={`${inputCls} text-right`} value={form.recovery_count} onChange={(e) => set("recovery_count")(e.target.value.replace(/\D/g, ""))} /></Field>
             </>}
             {kind === "acceleration" && <Field label="가속배율" hint="기본 1.5배 — 정규 원금 × 배율"><input inputMode="decimal" className={`${inputCls} text-right`} value={form.acceleration_multiplier} onChange={(e) => set("acceleration_multiplier")(e.target.value.replace(/[^0-9.]/g, ""))} /></Field>}

@@ -61,13 +61,14 @@ def test_resync_migration_paid_after_deferral():
     assert r.status_code == 201, r.text
     bad = dict(_not_paid(h, lid, "2026-11-20"))
     assert bad["2024-02-29"] == "OVERPAID" and bad["2024-08-31"] == "PARTIAL" and bad["2025-05-31"] == "UNPAID"
+    assert bad["2024-05-31"] == bad["2024-11-30"] == "UNPAID"     # 유예 후 1년 분기 이자 전용 행(2026-11-28 기준)
     stale = client.get("/api/v1/payments/overdue", params={"as_of": "2026-11-22"}, headers=h).json()["migration_stale"]
-    assert any(s["batch_id"] == bid and s["count"] == 9 for s in stale)
+    assert any(s["batch_id"] == bid and s["count"] == 11 for s in stale)
 
     pv = client.post(f"/api/v1/admin/migration/batches/{bid}/resync-paid", params={"apply": "false"}, headers=h).json()
-    assert pv["total"] == 9 and _not_paid(h, lid, "2026-11-20") != [("2023-02-28", "UNPAID")]   # 미리보기는 바꾸지 않음
+    assert pv["total"] == 11 and _not_paid(h, lid, "2026-11-20") != [("2023-02-28", "UNPAID")]   # 미리보기는 바꾸지 않음
     ap = client.post(f"/api/v1/admin/migration/batches/{bid}/resync-paid", params={"apply": "true"}, headers=h).json()
-    assert (ap["fixed"], ap["added"]) == (6, 3)
+    assert (ap["fixed"], ap["added"]) == (6, 5)
     assert _not_paid(h, lid, "2026-11-20") == [("2023-02-28", "UNPAID")]           # 일부러 미납으로 둔 회차만 남음
     assert client.post(f"/api/v1/admin/migration/batches/{bid}/resync-paid", params={"apply": "false"}, headers=h).json()["total"] == 0
     stale = client.get("/api/v1/payments/overdue", params={"as_of": "2026-11-22"}, headers=h).json()["migration_stale"]
