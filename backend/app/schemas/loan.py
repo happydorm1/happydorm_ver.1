@@ -66,6 +66,7 @@ class LoanBase(BaseModel):
     principal_repay_start_date: date
     repay_period_months: int = Field(..., gt=0)
     interest_rounding: Literal["ROUND", "ROUNDDOWN", "ROUNDDOWN10"] = "ROUND"
+    principal_rounding: Literal["ROUND", "ROUNDDOWN", "ROUNDDOWN10"] = "ROUND"   # 원금균등 회차당 원금
     grace_principal_payments: list[GracePrincipalPayment] = []
 
     @field_validator("grace_principal_payments", mode="before")

@@ -32,6 +32,7 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
     rate_type: "FIXED" as "FIXED" | "VARIABLE", rate: "", rate_start: "", rate_end: "", rate_table_name: "", rate_basis: "",
     grace_type_code_id: "", grace_start: "", grace_end: "", principal_start: "", principal_end: "", months: "", cycle: "", method: "",
     rounding: "ROUND" as "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10",
+    p_rounding: "ROUND" as "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10",
   });
   // 거치기간 중 원금상환(사원총회 협의로 건설 사업비 잔여액 등 상환) — 거치기간 이자 납입일에 원금을 함께 갚음
   const [gp, setGp] = useState<{ due_date: string; amount: number | null }[]>([]);
@@ -132,7 +133,7 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
       dormitory_id: f.dormitory_id, fund_id: f.fund_id, loan_code: loanCode.trim(), assigned_amount: f.assigned_amount!,
       assigned_date: f.assigned_date, rate_type: f.rate_type, repay_cycle_code_id: f.cycle, repay_method_code_id: f.method,
       grace_type_code_id: f.grace_type_code_id || null, grace_start_date: f.grace_start || null, grace_end_date: f.grace_end || null,
-      principal_repay_start_date: f.principal_start, repay_period_months: Number(f.months), interest_rounding: f.rounding,
+      principal_repay_start_date: f.principal_start, repay_period_months: Number(f.months), interest_rounding: f.rounding, principal_rounding: f.p_rounding,
       grace_principal_payments: gp.filter((x) => x.due_date && x.amount).map((x) => ({ due_date: x.due_date, amount: x.amount! })),
       initial_rate: { effective_start_date: f.rate_start || f.assigned_date, effective_end_date: f.rate_end || null, annual_rate: f.rate,
         rate_table_name: f.rate_table_name || null, rate_basis: f.rate_basis || null },
@@ -294,6 +295,13 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
               </Field>
               <Field label="이자 끝수처리" hint="이자 금액에만 적용합니다. 예) 2,375,868.49원 → 반올림 2,375,868 · 원 미만 절사 2,375,868 · 일의 자리 절사 2,375,860">
                 <select className={inputCls} value={f.rounding} onChange={(e) => set("rounding")(e.target.value)}>
+                  <option value="ROUND">반올림 — 원 미만(기본)</option>
+                  <option value="ROUNDDOWN">절사 — 원 미만 버림</option>
+                  <option value="ROUNDDOWN10">절사 — 일의 자리 버림(10원 단위)</option>
+                </select>
+              </Field>
+              <Field label="원금 끝수처리" hint="원금균등의 회차당 원금(배정액 ÷ 회차수)에 적용합니다. 예) 64,814,814.8원 → 반올림 64,814,815 · 원 미만 절사 64,814,814 · 일의 자리 절사 64,814,810">
+                <select className={inputCls} value={f.p_rounding} onChange={(e) => set("p_rounding")(e.target.value)}>
                   <option value="ROUND">반올림 — 원 미만(기본)</option>
                   <option value="ROUNDDOWN">절사 — 원 미만 버림</option>
                   <option value="ROUNDDOWN10">절사 — 일의 자리 버림(10원 단위)</option>

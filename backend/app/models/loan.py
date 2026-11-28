@@ -56,6 +56,8 @@ class Loan(Base, AuditMixin):
 
     # 이자 원단위 처리: ROUND(반올림, 기본) / ROUNDDOWN(절사 — 구 차입금 일부, 첨부6에서 확인)
     interest_rounding: Mapped[str] = mapped_column(String(12), default="ROUND", server_default="ROUND", nullable=False)
+    # 원금 끝수처리 — 원금균등의 회차당 원금(배정액 ÷ 회차수)에 적용. 선택지는 이자 끝수처리와 같다(2026-11-28)
+    principal_rounding: Mapped[str] = mapped_column(String(12), default="ROUND", server_default="ROUND", nullable=False)
 
     status: Mapped[LoanStatus] = mapped_column(Enum(LoanStatus), default=LoanStatus.ACTIVE, nullable=False)
 

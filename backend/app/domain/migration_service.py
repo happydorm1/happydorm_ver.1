@@ -36,14 +36,15 @@ from app.models.reference import Code, Fund
 # ---------- 양식 ----------
 SHEETS = {
     "기숙사": [("기숙사명*", "예) 가람관"), ("학교명*", "예) 가람대학교"), ("SPC명*", "예) 가람관(주) — 같은 이름이 있으면 그 SPC를 씀"),
-             ("사업유형", "예) 행복기숙사(사립)"), ("담당자 이메일", "재단 담당자 로그인 아이디(선택)")],
+             ("사업유형", "목록에서 선택 — 행복기숙사(연합) / 행복기숙사(사립) / 에듀21 / 기숙사형 청년주택"), ("담당자 이메일", "재단 담당자 로그인 아이디(선택)")],
     "차입금": [("기숙사명*", "기숙사 시트 또는 이미 등록된 기숙사 이름"), ("학교명", "같은 이름의 기숙사가 여럿일 때 구분"),
              ("차입금코드*", "예) 2017-08-21_공자-00 (중복 불가)"), ("재원*", "목록에서 선택"), ("배정금액(원)*", "숫자"),
              ("배정일*", "YYYY-MM-DD"), ("금리유형*", "고정 / 변동"), ("상환주기*", "목록에서 선택"), ("상환방식*", "목록에서 선택"),
-             ("거치유형", "거치가 있으면 선택"), ("거치시작일", "YYYY-MM-DD"), ("거치종료일", "YYYY-MM-DD (마지막 거치 이자 납입일 권장)"),
+             ("거치유형", "거치가 있으면 선택"), ("거치시작일", "YYYY-MM-DD — 비우면 배정일로 처리(거치종료일이 있을 때)"), ("거치종료일", "YYYY-MM-DD (마지막 거치 이자 납입일 권장)"),
              ("원금상환시작일*", "첫 원금 상환예정일"), ("원금상환종료일", "마지막 원금 상환일(만기) — 넣으면 상환기간(개월)은 비워도 자동 계산"),
              ("상환기간(개월)", "예) 324 — 원금상환종료일과 둘 중 하나는 필수"), ("이자끝수처리", "반올림(기본) / 절사(원 미만) / 절사(일의 자리)"),
-             ("최초금리(%)*", "예) 2.21"), ("최초금리 적용시작일", "비우면 배정일")],
+             ("최초금리(%)*", "예) 2.21"), ("최초금리 적용시작일", "비우면 배정일"),
+             ("원금끝수처리", "원금균등의 회차당 원금(배정액÷회차수) — 반올림(기본) / 절사(원 미만) / 절사(일의 자리). 예) 64,814,814.8 → 64,814,815 / 64,814,814 / 64,814,810")],
     "금리이력": [("차입금코드*", "변동금리 등 최초금리 이후 바뀐 금리만"), ("적용시작일*", "YYYY-MM-DD"), ("연금리(%)*", "예) 2.98")],
     "납부예외": [("차입금코드*", "기준일 이전 회차 중 예정대로 납부되지 않은 회차"), ("상환예정일*", "원리금 테이블의 상환예정일"),
              ("실제납부 원금(원)*", "미납이면 0"), ("실제납부 이자(원)*", "미납이면 0"), ("실제납부일", "비우면 상환예정일")],
@@ -55,7 +56,8 @@ GUIDE = [
     "",
     "1. '기숙사' → '차입금' → (변동금리면) '금리이력' 순서로 채웁니다. 별표(*) 칸은 꼭 채웁니다. 첫 줄(제목)은 지우지 마세요.",
     "2. 날짜는 YYYY-MM-DD(예: 2017-08-21), 금액은 숫자만(쉼표 가능), 금리는 % 숫자(예: 2.21)로 적습니다.",
-    "3. 재원·상환주기·상환방식·거치유형·금리유형은 칸을 누르면 나오는 목록에서 고릅니다(시스템 기준정보와 같은 이름).",
+    "3. 사업유형·재원·상환주기·상환방식·거치유형·금리유형·끝수처리는 칸을 누르면 나오는 목록에서 고릅니다(시스템 기준정보와 같은 이름).",
+    "   거치시작일을 비우면 배정일부터 거치로 봅니다(거치종료일은 꼭 적습니다).",
     "4. 금리이력: 최초금리 이후에 바뀐 금리만 적습니다. 원리금 테이블은 이 이력을 모두 반영해 처음부터 만들어집니다.",
     "5. 납부: 화면에서 '이관 기준일'과 '기준일 이전 회차 납부완료 처리'를 고르면, 기준일까지의 회차는 예정액대로 납부된 것으로 기록됩니다.",
     "   예정대로 내지 않은 회차만 '납부예외' 시트에 적습니다(미납이면 원금·이자 0, 일부납부면 실제 금액).",
@@ -66,7 +68,9 @@ GUIDE = [
     "8. 이관 후 '이관 대조표'를 내려받아 기존 엑셀의 잔여원금·다음 상환액과 맞춰 보세요.",
 ]
 HEAD_FILL = PatternFill("solid", fgColor="0F2A4D")
-OPTIONAL_HEADS = {"원금상환종료일"}   # 나중에 추가한 칸 — 예전 양식 파일에 없어도 된다
+# 이관 양식 '기숙사' 시트 사업유형 목록(2026-11-29 요청) — 늘어나면 여기에 추가
+PROJECT_TYPES = ["행복기숙사(연합)", "행복기숙사(사립)", "에듀21", "기숙사형 청년주택"]   # 차입금 등록 화면 '기숙사 추가' 창과 같게
+OPTIONAL_HEADS = {"원금상환종료일", "원금끝수처리"}   # 나중에 추가한 칸 — 예전 양식 파일에 없어도 된다
 
 
 def build_template(db: Session) -> bytes:
@@ -87,7 +91,8 @@ def build_template(db: Session) -> bytes:
         groups[grp] = [c.label for c in db.execute(select(Code).where(Code.group_code == grp, Code.is_active.is_(True),
                                                                       Code.is_deleted.is_(False)).order_by(Code.sort_order)).scalars()]
     cols = [("재원", funds), ("금리유형", ["고정", "변동"]), ("상환주기", groups["REPAY_CYCLE"]),
-            ("상환방식", groups["REPAY_METHOD"]), ("거치유형", groups["GRACE_TYPE"]), ("이자끝수처리", ["반올림", "절사(원 미만)", "절사(일의 자리)"])]
+            ("상환방식", groups["REPAY_METHOD"]), ("거치유형", groups["GRACE_TYPE"]), ("이자끝수처리", ["반올림", "절사(원 미만)", "절사(일의 자리)"]),
+            ("원금끝수처리", ["반올림", "절사(원 미만)", "절사(일의 자리)"]), ("사업유형", PROJECT_TYPES)]
     ranges = {}
     for ci, (name, vals) in enumerate(cols, start=1):
         lists.cell(row=1, column=ci, value=name).font = Font(bold=True)
@@ -246,6 +251,9 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             mgr = db.execute(select(User).where(User.email == email, User.is_deleted.is_(False))).scalar_one_or_none()
             if mgr is None:
                 issues.err("기숙사", r, "담당자 이메일", f"등록된 사용자가 아닙니다: {email}")
+        ptype = _text(v["사업유형"])
+        if ptype and ptype not in PROJECT_TYPES:
+            issues.err("기숙사", r, "사업유형", f"목록에 없는 사업유형입니다: '{ptype}' — {' / '.join(PROJECT_TYPES)} 중에서 고르세요.")
         dorms.append({"row": r, "name": key[0], "school": key[1], "spc": _text(v["SPC명"]),
                       "project_type": _text(v["사업유형"]) or None, "manager": mgr})
 
@@ -290,10 +298,15 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             if gt is None:
                 issues.err(s, r, "거치유형", f"기준정보에 없는 거치유형입니다: '{_text(v['거치유형'])}'")
                 ok = False
-        rounding = {"": "ROUND", "반올림": "ROUND", "ROUND": "ROUND", "절사": "ROUNDDOWN", "ROUNDDOWN": "ROUNDDOWN",
-                    "절사(원 미만)": "ROUNDDOWN", "절사(일의 자리)": "ROUNDDOWN10", "ROUNDDOWN10": "ROUNDDOWN10"}.get(_text(v["이자끝수처리"]))
+        rmap = {"": "ROUND", "반올림": "ROUND", "ROUND": "ROUND", "절사": "ROUNDDOWN", "ROUNDDOWN": "ROUNDDOWN",
+                "절사(원 미만)": "ROUNDDOWN", "절사(일의 자리)": "ROUNDDOWN10", "ROUNDDOWN10": "ROUNDDOWN10"}
+        rounding = rmap.get(_text(v["이자끝수처리"]))
         if rounding is None:
             issues.err(s, r, "이자끝수처리", "반올림 / 절사(원 미만) / 절사(일의 자리) 중 하나로 적으세요.")
+            ok = False
+        p_rounding = rmap.get(_text(v.get("원금끝수처리")))
+        if p_rounding is None:
+            issues.err(s, r, "원금끝수처리", "반올림 / 절사(원 미만) / 절사(일의 자리) 중 하나로 적으세요.")
             ok = False
         vals = {}
         for col, fn, key in (("배정금액(원)", _int, "amount"), ("배정일", _date, "assigned"), ("거치시작일", _date, "gs"),
@@ -325,8 +338,10 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             if ok and (vals["months"] is None or vals["months"] <= 0):
                 issues.err(s, r, "상환기간(개월)", "상환기간(개월) 또는 원금상환종료일을 적으세요(0보다 커야 함).")
                 ok = False
+            if vals["gs"] is None and vals["ge"] is not None:
+                vals["gs"] = vals["assigned"]          # 거치시작일 비우면 배정일(2026-11-29)
             if (vals["gs"] is None) != (vals["ge"] is None):
-                issues.err(s, r, "거치시작일", "거치시작일과 거치종료일은 둘 다 적거나 둘 다 비워야 합니다.")
+                issues.err(s, r, "거치종료일", "거치시작일을 적었으면 거치종료일도 적으세요.")
                 ok = False
             elif vals["gs"] and vals["gs"] > vals["ge"]:
                 issues.err(s, r, "거치종료일", "거치종료일이 거치시작일보다 빠릅니다.")
@@ -338,7 +353,7 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             if rs and vals["assigned"] and rs > vals["assigned"]:
                 issues.warn(s, r, "최초금리 적용시작일", "배정일보다 늦습니다 — 첫 이자기간에 쓸 금리가 없으면 검사에서 오류가 납니다.")
         if ok:
-            item.update(fund=fund, rate_type=rt, cycle=cyc, method=mth, grace=gt, rounding=rounding, **vals)
+            item.update(fund=fund, rate_type=rt, cycle=cyc, method=mth, grace=gt, rounding=rounding, p_rounding=p_rounding, **vals)
             item["rate_start"] = vals["rate_start"] or vals["assigned"]
             loans.append(item)
 
@@ -461,7 +476,8 @@ def _run(db: Session, data: dict, *, cutoff: date, mark_paid: bool, user: User, 
                     assigned_date=it["assigned"], rate_type=it["rate_type"], repay_cycle_code_id=it["cycle"].id,
                     repay_method_code_id=it["method"].id, grace_type_code_id=it["grace"].id if it["grace"] else None,
                     grace_start_date=it["gs"], grace_end_date=it["ge"], principal_repay_start_date=it["first"],
-                    repay_period_months=it["months"], interest_rounding=it["rounding"], created_by=user.id)
+                    repay_period_months=it["months"], interest_rounding=it["rounding"],
+                    principal_rounding=it["p_rounding"], created_by=user.id)
         gp = sorted(grace_by.get(it["code"], []), key=lambda x: x["due"])
         if gp:
             from app.schemas.loan import GracePrincipalPayment, check_grace_payments

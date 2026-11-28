@@ -208,6 +208,7 @@ def generate_equal_principal_schedule(
     period_start_date: datetime.date,
     start_installment_no: int = 0,
     rounding: str = "ROUND",
+    principal_rounding: str = "ROUND",
 ) -> list[ScheduleRow]:
     """
     공자기금 방식(원금균등, 단리). 1단계 Test A(161/161행 100% 일치) 로직 그대로.
@@ -217,7 +218,8 @@ def generate_equal_principal_schedule(
     원금(principal_per_installment)은 항상 원래 총 배정금액/총회차 기준으로 고정되고,
     실제 상환이력과 무관하게 변하지 않는다(2단계에서 확인된 원칙).
     """
-    principal_per_installment = excel_round(assigned_amount / total_installments)
+    # 원금 끝수처리(2026-11-28): 이자 끝수처리와 같은 3가지 — 홍제 2013-09-30_주택 등은 일의 자리 절사(64,814,810)
+    principal_per_installment = round_interest(Decimal(assigned_amount) / Decimal(total_installments), principal_rounding)
 
     rows: list[ScheduleRow] = []
     balance = balance_start

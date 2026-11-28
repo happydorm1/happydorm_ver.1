@@ -93,7 +93,7 @@ def generate_initial_schedule(
             months_per_period=months_per_period,
             rate_lookup=rate_lookup,
             period_start_date=period_start_date,
-            rounding=loan.interest_rounding,
+            rounding=loan.interest_rounding, principal_rounding=loan.principal_rounding,
         )
     else:
         rows += engine.generate_equal_payment_schedule(

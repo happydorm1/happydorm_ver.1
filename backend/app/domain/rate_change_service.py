@@ -146,7 +146,7 @@ def apply_rate_change(
             months_per_period=months_per_period,
             rate_lookup=rate_lookup,
             period_start_date=grace_rows[-1].due_date if grace_rows else loan.grace_end_date,   # 마지막 거치 납입일부터(기간 누락 방지)
-            rounding=loan.interest_rounding,
+            rounding=loan.interest_rounding, principal_rounding=loan.principal_rounding,
         )
     else:
         # 상환 진행 중 — 커트오버 회차부터 잔여 회차를 재생성(원금은 원래 금액 유지)
@@ -159,7 +159,7 @@ def apply_rate_change(
             rate_lookup=rate_lookup,
             period_start_date=cutover_row.interest_calc_start,
             start_installment_no=cutover_row.installment_no - 1,
-            rounding=loan.interest_rounding,
+            rounding=loan.interest_rounding, principal_rounding=loan.principal_rounding,
         )
 
     # 3) 새 버전 생성: 과거 불변 구간 + 재계산된 구간

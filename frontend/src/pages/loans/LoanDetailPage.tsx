@@ -89,7 +89,8 @@ function InfoTab({ loan, writable, onSaved }: { loan: Loan; writable: boolean; o
     ["원금상환시작일", loan.principal_repay_start_date],
     ["상환기간", `${loan.repay_period_months}개월 (${Math.floor(loan.repay_period_months / 12)}년${loan.repay_period_months % 12 ? ` ${loan.repay_period_months % 12}개월` : ""})`],
     ["상환주기", code(loan.repay_cycle_code_id, ref?.cycles)], ["상환유형", code(loan.repay_method_code_id, ref?.methods)],
-    ["이자 끝수처리", ({ ROUND: "반올림(원 미만)", ROUNDDOWN: "절사(원 미만)", ROUNDDOWN10: "절사(일의 자리)" } as const)[loan.interest_rounding] ?? loan.interest_rounding], ["상태", loanStatus(loan).label],
+    ["이자 끝수처리", ({ ROUND: "반올림(원 미만)", ROUNDDOWN: "절사(원 미만)", ROUNDDOWN10: "절사(일의 자리)" } as const)[loan.interest_rounding] ?? loan.interest_rounding],
+    ["원금 끝수처리", ({ ROUND: "반올림(원 미만)", ROUNDDOWN: "절사(원 미만)", ROUNDDOWN10: "절사(일의 자리)" } as const)[loan.principal_rounding ?? "ROUND"] ?? loan.principal_rounding], ["상태", loanStatus(loan).label],
     ["등록일시", fmtDateTime(loan.created_at)],
   ];
   return (
