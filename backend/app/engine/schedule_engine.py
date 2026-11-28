@@ -142,6 +142,7 @@ def generate_grace_period_rows(
     rounding: str = "ROUND",
     balance_start: int | None = None,
     principal_payments: dict[datetime.date, int] | None = None,
+    first_due_date: datetime.date | None = None,
 ) -> list[ScheduleRow]:
     """
     거치기간: 원금상환 없이 이자만 발생(10~11번 요구사항).
@@ -154,6 +155,15 @@ def generate_grace_period_rows(
     rows: list[ScheduleRow] = []
     period_start = start_date
     due_date = first_anchor_due_date(start_date, months_per_period)
+    # 첫 이자납입일(차입금별, 2026-11-29): 지급일 바로 뒤 상환일을 건너뛰고 그다음 상환일에 첫 이자를 받는 경우
+    # (예: 인천 2026-02-27 지급 → 2026-02-28 건너뛰고 2026-08-31에 185일치)
+    if first_due_date and first_due_date > start_date:
+        d = due_date
+        while d < first_due_date:
+            d = add_months_eom(d, months_per_period)
+        if d != first_due_date:
+            raise ValueError(f"첫 이자납입일({first_due_date})이 상환주기의 상환일(월말)과 맞지 않습니다.")
+        due_date = first_due_date
     balance = assigned_amount if balance_start is None else balance_start
     payments = {d: a for d, a in (principal_payments or {}).items() if d > start_date}
     used: set[datetime.date] = set()

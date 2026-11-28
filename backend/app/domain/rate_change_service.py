@@ -134,6 +134,7 @@ def apply_rate_change(
                 rounding=loan.interest_rounding,
                 balance_start=cutover_row.balance_before,          # 거치기간 중 이미 갚은 원금 반영
                 principal_payments=grace_payments_map(loan),        # 남은 거치기간 중 원금상환
+                first_due_date=loan.first_interest_date,           # 첫 이자납입일 지정(커트오버가 그 전이면 유지)
             )
         except ValueError as e:
             raise RateChangeError(str(e))

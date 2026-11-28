@@ -44,12 +44,15 @@ SHEETS = {
              ("원금상환시작일*", "첫 원금 상환예정일"), ("원금상환종료일", "마지막 원금 상환일(만기) — 넣으면 상환기간(개월)은 비워도 자동 계산"),
              ("상환기간(개월)", "예) 324 — 원금상환종료일과 둘 중 하나는 필수"), ("이자끝수처리", "반올림(기본) / 절사(원 미만) / 절사(일의 자리)"),
              ("최초금리(%)*", "예) 2.21"), ("최초금리 적용시작일", "비우면 배정일"),
-             ("원금끝수처리", "원금균등의 회차당 원금(배정액÷회차수) — 반올림(기본) / 절사(원 미만) / 절사(일의 자리). 예) 64,814,814.8 → 64,814,815 / 64,814,814 / 64,814,810")],
+             ("원금끝수처리", "원금균등의 회차당 원금(배정액÷회차수) — 반올림(기본) / 절사(원 미만) / 절사(일의 자리). 예) 64,814,814.8 → 64,814,815 / 64,814,814 / 64,814,810"),
+             ("첫이자납입일", "보통 비움(지급일 다음 상환일). 지급일과 상환일이 너무 가까워 그다음 상환일에 합쳐 받았으면 그 날짜 — 예) 2026-02-27 지급 → 2026-08-31")],
     "금리이력": [("차입금코드*", "변동금리 등 최초금리 이후 바뀐 금리만"), ("적용시작일*", "YYYY-MM-DD"), ("연금리(%)*", "예) 2.98")],
     "납부예외": [("차입금코드*", "기준일 이전 회차 중 예정대로 납부되지 않은 회차"), ("상환예정일*", "원리금 테이블의 상환예정일"),
              ("실제납부 원금(원)*", "미납이면 0"), ("실제납부 이자(원)*", "미납이면 0"), ("실제납부일", "비우면 상환예정일")],
     "거치중원금상환": [("차입금코드*", "거치기간 중 원금을 갚은(갚을) 차입금"), ("상환예정일*", "거치기간의 이자 납입일(월말) — 예) 2018-11-30"),
                 ("원금상환액(원)*", "그날 갚는 원금 — 이후 이자는 줄어든 잔액으로 계산")],
+    "이자조정": [("차입금코드*", "기존 엑셀과 이자가 몇 원 다른 회차(엑셀 기준으로 상환 중인 예외)"), ("상환예정일*", "원리금 테이블의 상환예정일"),
+             ("이자(원)*", "그 상환일에 받는 이자 합계(기존 엑셀 금액)"), ("사유", "예) 기존 엑셀 연말 미분리 계산")],
 }
 GUIDE = [
     "기존 차입금 일괄 이관 양식",
@@ -63,6 +66,9 @@ GUIDE = [
     "   예정대로 내지 않은 회차만 '납부예외' 시트에 적습니다(미납이면 원금·이자 0, 일부납부면 실제 금액).",
     "5-1. 거치기간 중 원금상환(사원총회 협의로 건설 사업비 잔여액 상환 등)은 '거치중원금상환' 시트에 적습니다.",
     "   거치기간의 이자 납입일(상환예정일)에 원금을 함께 갚고, 상환기간 회차당 원금은 그대로라 잔액이 먼저 끝나면 만기가 앞당겨집니다.",
+    "5-2. 지급일과 상환일이 너무 가까워 첫 이자를 그다음 상환일에 합쳐 받았으면 '차입금' 시트 맨 끝 '첫이자납입일'에 그 날짜를 적습니다.",
+    "5-3. 기존 엑셀이 계산 방식 차이로 몇 원 다르지만 엑셀 기준으로 상환 중이면 '이자조정' 시트에 그 회차의 이자(엑셀 금액)를 적습니다.",
+    "   최초 원리금 테이블에서 그 상환일의 이자만 맞춥니다(원금·잔액은 그대로).",
     "6. 상환유예·조기상환·가속상환·대환은 일괄 대상이 아닙니다. 이관 뒤 '이벤트 관리'에서 발생 순서대로 등록하세요.",
     "7. 화면에서 '검사'를 누르면 실제로 등록·계산까지 해 본 뒤 되돌립니다. 오류가 없을 때만 '이관 실행'이 됩니다(전부 반영 또는 전혀 반영 안 함).",
     "8. 이관 후 '이관 대조표'를 내려받아 기존 엑셀의 잔여원금·다음 상환액과 맞춰 보세요.",
@@ -70,7 +76,7 @@ GUIDE = [
 HEAD_FILL = PatternFill("solid", fgColor="0F2A4D")
 # 이관 양식 '기숙사' 시트 사업유형 목록(2026-11-29 요청) — 늘어나면 여기에 추가
 PROJECT_TYPES = ["행복기숙사(연합)", "행복기숙사(사립)", "에듀21", "기숙사형 청년주택"]   # 차입금 등록 화면 '기숙사 추가' 창과 같게
-OPTIONAL_HEADS = {"원금상환종료일", "원금끝수처리"}   # 나중에 추가한 칸 — 예전 양식 파일에 없어도 된다
+OPTIONAL_HEADS = {"원금상환종료일", "원금끝수처리", "첫이자납입일"}   # 나중에 추가한 칸 — 예전 양식 파일에 없어도 된다
 
 
 def build_template(db: Session) -> bytes:
@@ -311,7 +317,8 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
         vals = {}
         for col, fn, key in (("배정금액(원)", _int, "amount"), ("배정일", _date, "assigned"), ("거치시작일", _date, "gs"),
                              ("거치종료일", _date, "ge"), ("원금상환시작일", _date, "first"), ("원금상환종료일", _date, "last"), ("상환기간(개월)", _int, "months"),
-                             ("최초금리(%)", _rate, "rate"), ("최초금리 적용시작일", _date, "rate_start")):
+                             ("최초금리(%)", _rate, "rate"), ("최초금리 적용시작일", _date, "rate_start"),
+                             ("첫이자납입일", _date, "first_int")):
             try:
                 vals[key] = fn(v[col])
             except ValueError as e:
@@ -337,6 +344,13 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
                     vals["months"] = diff + mpp
             if ok and (vals["months"] is None or vals["months"] <= 0):
                 issues.err(s, r, "상환기간(개월)", "상환기간(개월) 또는 원금상환종료일을 적으세요(0보다 커야 함).")
+                ok = False
+            if vals["first_int"] and vals["ge"] is not None and not (
+                    (vals["gs"] or vals["assigned"]) < vals["first_int"] <= vals["ge"]):
+                issues.err(s, r, "첫이자납입일", "첫이자납입일은 거치기간 안(배정일 이후 ~ 거치종료일)이어야 합니다.")
+                ok = False
+            elif vals["first_int"] and vals["ge"] is None:
+                issues.err(s, r, "첫이자납입일", "첫이자납입일은 거치기간이 있을 때만 적습니다.")
                 ok = False
             if vals["gs"] is None and vals["ge"] is not None:
                 vals["gs"] = vals["assigned"]          # 거치시작일 비우면 배정일(2026-11-29)
@@ -411,7 +425,29 @@ def _parse(db: Session, content: bytes, issues: Issues) -> dict:
             issues.err("거치중원금상환", r, "상환예정일", "같은 차입금·상환예정일이 두 번 적혀 있습니다.")
             continue
         grace_pay.append(item)
-    return {"dorms": dorms, "loans": loans, "rates": rates, "excepts": excepts, "grace_pay": grace_pay}
+
+    adjusts = []
+    for r, v in _rows(wb, "이자조정", issues):
+        if not _need(issues, "이자조정", r, v, "차입금코드", "상환예정일", "이자(원)"):
+            continue
+        code = _text(v["차입금코드"])
+        if code not in loan_codes:
+            issues.err("이자조정", r, "차입금코드", f"'차입금' 시트에 없는 차입금코드입니다: {code}")
+            continue
+        try:
+            item = {"row": r, "code": code, "due": _date(v["상환예정일"]), "interest": _int(v["이자(원)"]),
+                    "reason": _text(v["사유"])}
+        except ValueError as e:
+            issues.err("이자조정", r, None, str(e))
+            continue
+        if item["interest"] is None or item["interest"] < 0:
+            issues.err("이자조정", r, "이자(원)", "0 이상의 금액을 적으세요.")
+            continue
+        if any(x["code"] == code and x["due"] == item["due"] for x in adjusts):
+            issues.err("이자조정", r, "상환예정일", "같은 차입금·상환예정일이 두 번 적혀 있습니다.")
+            continue
+        adjusts.append(item)
+    return {"dorms": dorms, "loans": loans, "rates": rates, "excepts": excepts, "grace_pay": grace_pay, "adjusts": adjusts}
 
 
 # ---------- 반영 ----------
@@ -461,6 +497,9 @@ def _run(db: Session, data: dict, *, cutoff: date, mark_paid: bool, user: User, 
     exc_by = defaultdict(dict)
     for x in data["excepts"]:
         exc_by[x["code"]][x["due"]] = x
+    adj_by = defaultdict(list)
+    for x in data.get("adjusts", []):
+        adj_by[x["code"]].append(x)
     grace_by = defaultdict(list)
     for x in data.get("grace_pay", []):
         grace_by[x["code"]].append(x)
@@ -489,6 +528,12 @@ def _run(db: Session, data: dict, *, cutoff: date, mark_paid: bool, user: User, 
                 continue
             loan.grace_principal_payments = [{"due_date": x["due"].isoformat(), "amount": x["amount"]} for x in gp]
             stats["grace_payments"] = stats.get("grace_payments", 0) + len(gp)
+        loan.first_interest_date = it.get("first_int")
+        adj = sorted(adj_by.get(it["code"], []), key=lambda x: x["due"])
+        if adj:
+            loan.interest_adjustments = [{"due_date": x["due"].isoformat(), "interest": x["interest"], "reason": x["reason"]}
+                                         for x in adj]
+            stats["interest_adjustments"] = stats.get("interest_adjustments", 0) + len(adj)
         db.add(loan)
         db.flush()
         hist = [{"start": it["rate_start"], "rate": it["rate"], "row": it["row"], "sheet": "차입금"}]

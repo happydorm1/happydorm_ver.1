@@ -51,6 +51,28 @@ def check_grace_payments(payments, grace_start, grace_end, assigned_amount) -> N
         raise ValueError("거치기간 중 원금상환 합계가 배정금액보다 작아야 합니다.")
 
 
+class InterestAdjustment(BaseModel):
+    """회차 이자 조정 1건 — 기존 엑셀의 예외 금액을 그대로 이관할 때(2026-11-29). 그 상환일의 이자 합계를 이 금액으로."""
+    due_date: date
+    interest: int = Field(..., ge=0)
+    reason: str | None = Field(default=None, max_length=200)
+
+
+def check_interest_adjustments(items) -> None:
+    dates = [a.due_date for a in items or []]
+    if len(set(dates)) != len(dates):
+        raise ValueError("회차 이자 조정에 같은 상환일이 두 번 있습니다.")
+
+
+def check_first_interest_date(first, grace_start, grace_end) -> None:
+    if first is None:
+        return
+    if not (grace_start and grace_end):
+        raise ValueError("첫 이자납입일은 거치기간(시작·종료일)이 있을 때만 지정할 수 있습니다.")
+    if not (grace_start < first <= grace_end):
+        raise ValueError(f"첫 이자납입일 {first}이(가) 거치기간({grace_start} ~ {grace_end}) 밖입니다.")
+
+
 class LoanBase(BaseModel):
     dormitory_id: uuid.UUID
     fund_id: uuid.UUID
@@ -68,8 +90,10 @@ class LoanBase(BaseModel):
     interest_rounding: Literal["ROUND", "ROUNDDOWN", "ROUNDDOWN10"] = "ROUND"
     principal_rounding: Literal["ROUND", "ROUNDDOWN", "ROUNDDOWN10"] = "ROUND"   # 원금균등 회차당 원금
     grace_principal_payments: list[GracePrincipalPayment] = []
+    first_interest_date: date | None = None                       # 비우면 지급일 다음 상환일
+    interest_adjustments: list[InterestAdjustment] = []           # 기존 엑셀 예외(최초 원리금 테이블에만 적용)
 
-    @field_validator("grace_principal_payments", mode="before")
+    @field_validator("grace_principal_payments", "interest_adjustments", mode="before")
     @classmethod
     def _none_to_list(cls, v):
         return v or []
@@ -86,6 +110,8 @@ class LoanBase(BaseModel):
             raise ValueError("거치종료일은 거치시작일보다 빠를 수 없습니다.")
         check_grace_payments(sorted(self.grace_principal_payments, key=lambda p: p.due_date),
                              self.grace_start_date, self.grace_end_date, self.assigned_amount)
+        check_first_interest_date(self.first_interest_date, self.grace_start_date, self.grace_end_date)
+        check_interest_adjustments(self.interest_adjustments)
         return self
 
 
@@ -101,6 +127,8 @@ class LoanUpdate(BaseModel):
     principal_repay_start_date: date | None = None
     repay_period_months: int | None = None
     grace_principal_payments: list[GracePrincipalPayment] | None = None
+    first_interest_date: date | None = None
+    interest_adjustments: list[InterestAdjustment] | None = None
     status: LoanStatus | None = None
     change_reason: str | None = Field(default=None, max_length=500, description="변경사유(변경이력에 기록)")
 

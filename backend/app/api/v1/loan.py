@@ -25,7 +25,7 @@ router = APIRouter(prefix="/loans", tags=["차입금"])
 
 WRITE_ROLES = (UserRole.SYSTEM_ADMIN, UserRole.FOUNDATION_FUND_MANAGER)
 CONTRACT_FIELDS = {"assigned_amount", "grace_start_date", "grace_end_date", "principal_repay_start_date", "repay_period_months",
-                   "grace_principal_payments"}
+                   "grace_principal_payments", "first_interest_date", "interest_adjustments"}
 
 
 def grace_payments_json(payments) -> list | None:
@@ -34,6 +34,15 @@ def grace_payments_json(payments) -> list | None:
         return None
     items = [p if isinstance(p, dict) else p.model_dump() for p in payments]
     return [{"due_date": str(p["due_date"]), "amount": int(p["amount"])} for p in sorted(items, key=lambda p: str(p["due_date"]))]
+
+
+def interest_adjustments_json(items) -> list | None:
+    """회차 이자 조정 → DB(JSON) 저장 형식. 날짜순, 없으면 None."""
+    if not items:
+        return None
+    rows = [a if isinstance(a, dict) else a.model_dump() for a in items]
+    return [{"due_date": str(a["due_date"]), "interest": int(a["interest"]), "reason": a.get("reason") or ""}
+            for a in sorted(rows, key=lambda a: str(a["due_date"]))]
 
 
 def _loan_query():
@@ -77,6 +86,7 @@ def create_loan(
 
     data = payload.model_dump(exclude={"initial_rate"})
     data["grace_principal_payments"] = grace_payments_json(payload.grace_principal_payments)
+    data["interest_adjustments"] = interest_adjustments_json(payload.interest_adjustments)
     loan = Loan(**data, created_by=current_user.id)
     db.add(loan)
     db.flush()  # loan.id 확보
@@ -134,6 +144,21 @@ def update_loan(
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
         changes["grace_principal_payments"] = grace_payments_json(gp)
+    if "first_interest_date" in changes:
+        from app.schemas.loan import check_first_interest_date
+        try:
+            check_first_interest_date(changes["first_interest_date"], changes.get("grace_start_date", loan.grace_start_date),
+                                      changes.get("grace_end_date", loan.grace_end_date))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+    if "interest_adjustments" in changes:
+        from app.schemas.loan import InterestAdjustment, check_interest_adjustments
+        ia = [InterestAdjustment(**a) for a in (changes["interest_adjustments"] or [])]
+        try:
+            check_interest_adjustments(ia)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        changes["interest_adjustments"] = interest_adjustments_json(ia)
     contract_fields = set(changes) & CONTRACT_FIELDS
     if contract_fields:
         # §50: 기존 데이터를 임의로 덮어쓰지 않는다 — 원리금 테이블이 이미 있으면 계약조건은 이벤트로만 변경

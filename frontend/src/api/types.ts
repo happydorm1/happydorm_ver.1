@@ -138,6 +138,8 @@ export interface LoanBase {
   repay_period_months: number; interest_rounding: "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10";
   principal_rounding?: "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10";
   grace_principal_payments?: { due_date: string; amount: number }[];
+  first_interest_date?: string | null;
+  interest_adjustments?: { due_date: string; interest: number; reason?: string }[] | null;
 }
 export interface LoanCreate extends LoanBase { initial_rate: RateInput }
 export interface Loan extends LoanBase {

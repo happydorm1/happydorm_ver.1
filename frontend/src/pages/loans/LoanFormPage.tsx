@@ -30,7 +30,7 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
   const [f, setF] = useState({
     dormitory_id: defaultDormitory ?? "", fund_id: "", loan_code: "", assigned_date: "", assigned_amount: null as number | null,
     rate_type: "FIXED" as "FIXED" | "VARIABLE", rate: "", rate_start: "", rate_end: "", rate_table_name: "", rate_basis: "",
-    grace_type_code_id: "", grace_start: "", grace_end: "", principal_start: "", principal_end: "", months: "", cycle: "", method: "",
+    grace_type_code_id: "", grace_start: "", grace_end: "", first_interest: "", principal_start: "", principal_end: "", months: "", cycle: "", method: "",
     rounding: "ROUND" as "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10",
     p_rounding: "ROUND" as "ROUND" | "ROUNDDOWN" | "ROUNDDOWN10",
   });
@@ -108,6 +108,8 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
     if (f.rate_end && f.rate_end <= (f.rate_start || f.assigned_date)) e.rate_end = "적용종료일은 적용시작일보다 뒤여야 합니다.";
     if (Boolean(f.grace_start) !== Boolean(f.grace_end)) e.grace_end = "거치 시작·종료일을 함께 입력하거나 둘 다 비우세요.";
     if (f.grace_start && f.grace_end && f.grace_end < f.grace_start) e.grace_end = "거치종료일이 거치시작일보다 빠릅니다.";
+    if (f.first_interest && (!f.grace_start || !f.grace_end)) e.first_interest = "거치기간(시작·종료일)을 먼저 넣으세요.";
+    else if (f.first_interest && (f.first_interest <= f.grace_start || f.first_interest > f.grace_end)) e.first_interest = "거치기간 안의 상환일(월말)이어야 합니다.";
     gp.forEach((x, i) => {
       if (!x.due_date || !x.amount) e[`gp${i}`] = "상환일과 금액을 모두 넣으세요.";
       else if (!f.grace_start || !f.grace_end) e[`gp${i}`] = "거치기간(시작·종료일)을 먼저 넣으세요.";
@@ -134,6 +136,7 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
       assigned_date: f.assigned_date, rate_type: f.rate_type, repay_cycle_code_id: f.cycle, repay_method_code_id: f.method,
       grace_type_code_id: f.grace_type_code_id || null, grace_start_date: f.grace_start || null, grace_end_date: f.grace_end || null,
       principal_repay_start_date: f.principal_start, repay_period_months: Number(f.months), interest_rounding: f.rounding, principal_rounding: f.p_rounding,
+      first_interest_date: f.first_interest || null,
       grace_principal_payments: gp.filter((x) => x.due_date && x.amount).map((x) => ({ due_date: x.due_date, amount: x.amount! })),
       initial_rate: { effective_start_date: f.rate_start || f.assigned_date, effective_end_date: f.rate_end || null, annual_rate: f.rate,
         rate_table_name: f.rate_table_name || null, rate_basis: f.rate_basis || null },
@@ -229,6 +232,13 @@ export function LoanFormPage({ me, defaultDormitory }: { me: Me | null; defaultD
               <Field label="거치시작일"><input type="date" className={inputCls} value={f.grace_start} onChange={(e) => set("grace_start")(e.target.value)} /></Field>
               <Field label="거치종료일" error={errors.grace_end}>
                 <input type="date" className={inputCls} aria-invalid={inv("grace_end")} value={f.grace_end} onChange={(e) => set("grace_end")(e.target.value)} />
+              </Field>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 mt-3">
+              <Field label="첫 이자납입일 (선택)" error={errors.first_interest}
+                hint="보통 비웁니다(지급일 다음 상환일). 지급일과 상환일이 너무 가까워 그다음 상환일에 합쳐 받을 때만 그 날짜를 넣습니다. 예) 2026-02-27 지급 → 2026-08-31">
+                <input type="date" className={inputCls} aria-invalid={inv("first_interest")} value={f.first_interest}
+                  min={f.grace_start || undefined} max={f.grace_end || undefined} onChange={(e) => set("first_interest")(e.target.value)} />
               </Field>
             </div>
             <section aria-label="거치기간 중 원금상환" className="mt-4 border-t border-line pt-3">

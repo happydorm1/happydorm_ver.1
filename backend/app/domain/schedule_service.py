@@ -29,6 +29,27 @@ class ScheduleGenerationError(Exception):
     pass
 
 
+def apply_interest_adjustments(rows: list, adjustments: list | None) -> None:
+    """
+    회차 이자 조정(2026-11-29) — 기존 엑셀의 예외 금액을 그대로 이관하기 위해, 그 상환일에 실제로 받는 이자 합계를
+    지정 금액으로 맞춘다. 연말 분리 등으로 한 상환일에 행이 여럿이면 마지막(청구) 행에서 차액을 더하거나 뺀다.
+    원금·잔액은 건드리지 않는다. 최초 원리금 테이블(V1)에만 적용(금리변동 등으로 다시 계산되는 회차에는 적용하지 않음).
+    """
+    for a in adjustments or []:
+        d = date.fromisoformat(a["due_date"])
+        billed = [r for r in rows if r.due_date == d and r.row_type != "YEAR_END_SPLIT_MEMO"]
+        if not billed:
+            raise ScheduleGenerationError(f"회차 이자 조정의 상환일 {d}이(가) 원리금 테이블에 없습니다.")
+        delta = int(a["interest"]) - sum(r.interest_amount for r in billed)
+        last = billed[-1]
+        if last.interest_amount + delta < 0:
+            raise ScheduleGenerationError(f"회차 이자 조정({d}, {int(a['interest']):,}원)이 연말 분리된 앞 구간 이자보다 작습니다.")
+        if delta:
+            last.interest_amount += delta
+            note = f"이자 조정 {delta:+,}원(기존 엑셀)"
+            last.remark = f"{last.remark} · {note}" if last.remark else note
+
+
 def _months_per_period(db: Session, repay_cycle_code_id: uuid.UUID) -> int:
     code = db.get(Code, repay_cycle_code_id)
     if code is None or not code.extra_value or "periods_per_year" not in code.extra_value:
@@ -71,6 +92,7 @@ def generate_initial_schedule(
                 rate_lookup=rate_lookup,
                 rounding=loan.interest_rounding,
                 principal_payments=grace_payments_map(loan),
+                first_due_date=loan.first_interest_date,
             )
         except ValueError as e:
             raise ScheduleGenerationError(str(e))
@@ -106,6 +128,7 @@ def generate_initial_schedule(
             rounding=loan.interest_rounding,
         )
 
+    apply_interest_adjustments(rows, loan.interest_adjustments)
     validation = engine.validate_schedule(rows, loan.assigned_amount)
 
     # 삭제(숨김)된 이전 테이블이 있으면 번호를 이어서 매긴다 — 이미 발급한 공문의 '근거 V1' 등과 헷갈리지 않게

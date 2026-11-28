@@ -58,6 +58,11 @@ class Loan(Base, AuditMixin):
     interest_rounding: Mapped[str] = mapped_column(String(12), default="ROUND", server_default="ROUND", nullable=False)
     # 원금 끝수처리 — 원금균등의 회차당 원금(배정액 ÷ 회차수)에 적용. 선택지는 이자 끝수처리와 같다(2026-11-28)
     principal_rounding: Mapped[str] = mapped_column(String(12), default="ROUND", server_default="ROUND", nullable=False)
+    # 첫 이자납입일(선택) — 비우면 지급일 다음 상환일. 지급일과 상환일이 너무 가까워 다음 상환일로 합친 경우 지정(2026-11-29)
+    first_interest_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 회차 이자 조정(기존 엑셀 예외 그대로 이관) — [{"due_date": "YYYY-MM-DD", "interest": 정수, "reason": ""}]
+    # 최초 원리금 테이블(V1)에서 그 상환일의 이자 합계를 이 금액으로 맞춘다(원금·잔액은 그대로)
+    interest_adjustments: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     status: Mapped[LoanStatus] = mapped_column(Enum(LoanStatus), default=LoanStatus.ACTIVE, nullable=False)
 
